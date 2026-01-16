@@ -32,9 +32,9 @@ const CreativeStudio = () => {
   };
 
   return (
-    <div className="min-h-screen pt-32 px-6 max-w-6xl mx-auto flex flex-col items-center">
+    <div className="min-h-screen pt-24 md:pt-32 px-6 max-w-6xl mx-auto flex flex-col items-center">
       <div className="text-center mb-16 animate-in">
-        <h1 className="text-4xl md:text-6xl font-extrabold mb-4 tracking-tight text-slate-900">Creative Studio</h1>
+        <h1 className="text-3xl md:text-6xl font-extrabold mb-4 tracking-tight text-slate-900">Creative Studio</h1>
         <p className="text-lg text-slate-500 max-w-xl mx-auto">
           Choose a tool to jumpstart your imagination.
         </p>

@@ -28,12 +28,12 @@ const SmartSearch = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center pt-32 px-4 w-full max-w-4xl mx-auto">
+    <div className="min-h-screen flex flex-col items-center pt-24 md:pt-32 px-4 w-full max-w-4xl mx-auto">
       <div className="text-center mb-10 animate-in">
         <div className="mx-auto w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
             <MessageSquare className="text-blue-600" />
         </div>
-        <h1 className="text-4xl md:text-5xl font-extrabold mb-4 text-slate-900 tracking-tight">
+        <h1 className="text-3xl md:text-5xl font-extrabold mb-4 text-slate-900 tracking-tight">
           Ask me anything.
         </h1>
         <p className="text-lg text-slate-500 max-w-lg mx-auto">
