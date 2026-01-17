@@ -49,6 +49,10 @@ const Hero = () => {
           <Link to="/creative" className="btn-glass text-lg px-8 py-4">
             <Zap className="text-purple-600" /> Open Studio
           </Link>
+
+          <Link to="/login" className="px-8 py-4 rounded-xl font-bold bg-slate-900 text-white hover:bg-slate-800 transition shadow-xl border border-slate-700">
+             Member Login
+          </Link>
         </div>
 
         {/* Social Proof / Trusted By (Mock) */}

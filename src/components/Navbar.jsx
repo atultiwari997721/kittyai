@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Sparkles, Search, Zap } from 'lucide-react';
+import { Sparkles, Search, Zap, MessageSquare } from 'lucide-react';
 import KLogo from './KLogo';
 
 const Navbar = () => {
@@ -10,12 +10,14 @@ const Navbar = () => {
     { path: '/', label: 'Home', icon: Sparkles },
     { path: '/search', label: 'AI Search', icon: Search },
     { path: '/creative', label: 'Studio', icon: Zap },
+    { path: '/whatsapp', label: 'WhatsApp', icon: MessageSquare },
   ];
 
   return (
+
     <nav className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50 w-[95%] max-w-fit">
       <div className="bg-white/80 backdrop-blur-xl border border-white/40 px-2 py-2 rounded-full flex items-center justify-between gap-1 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
-        <Link to="/" className="flex items-center gap-2 px-4 py-2 mr-2 hover:opacity-70 transition-opacity">
+        <Link to="/" className="flex items-center gap-2 px-1 py-1 mr-2 hover:opacity-70 transition-opacity">
           <div className="flex items-center justify-center">
             <KLogo className="w-8 h-8" />
           </div>
@@ -41,6 +43,15 @@ const Navbar = () => {
             </Link>
           );
         })}
+
+        <div className="h-6 w-px bg-slate-200 mx-2"></div>
+
+        <Link 
+          to="/login"
+          className="px-5 py-2.5 rounded-full bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition shadow-lg flex items-center gap-2"
+        >
+          Login
+        </Link>
       </div>
     </nav>
   );
