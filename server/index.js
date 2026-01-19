@@ -8,7 +8,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const WhatsAppService = require('./whatsappService');
 
-dotenv.config();
+const path = require('path');
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 const PORT = process.env.PORT || 5003;
@@ -18,7 +19,7 @@ app.use(cors());
 app.use(express.json());
 
 // Supabase Admin Client (Service Role for backend operations)
-if (process.env.SUPABASE_SERVICE_KEY.includes('REPLACE')) {
+if (!process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_KEY.includes('REPLACE')) {
   console.error("CRITICAL ERROR: invalid SUPABASE_SERVICE_KEY in .env. Admin actions will fail.");
 }
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'react-qr-code';
 import { io } from 'socket.io-client';
-import { MessageSquare, Send, RefreshCw, Smartphone, CheckCircle, AlertCircle, Terminal } from 'lucide-react';
+import { MessageSquare, Send, RefreshCw, Smartphone, CheckCircle, AlertCircle, Terminal, Image, X } from 'lucide-react';
 
 const WhatsAppSender = () => {
     const [socket, setSocket] = useState(null);
@@ -10,11 +10,14 @@ const WhatsAppSender = () => {
     const [logs, setLogs] = useState([]);
     const [message, setMessage] = useState('');
     const [numbers, setNumbers] = useState('');
+    const [image, setImage] = useState(null); // base64
+    const [previewUrl, setPreviewUrl] = useState(null);
     const logsEndRef = useRef(null);
+    const fileInputRef = useRef(null);
 
     useEffect(() => {
         // Connect to backend
-        const newSocket = io('http://localhost:5003');
+        const newSocket = io(`http://${window.location.hostname}:5003`);
         setSocket(newSocket);
 
         newSocket.on('connect', () => {
@@ -42,12 +45,35 @@ const WhatsAppSender = () => {
             setLogs(prev => [...prev, { ...log, timestamp: new Date().toLocaleTimeString() }]);
         });
 
+        newSocket.on('connect_error', (err) => {
+            console.error('Connection Error:', err);
+             setStatus('connection_error');
+        });
+
         return () => newSocket.close();
     }, []);
 
     useEffect(() => {
         logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [logs]);
+
+    const handleImageChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setImage(reader.result);
+                setPreviewUrl(reader.result);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const removeImage = () => {
+        setImage(null);
+        setPreviewUrl(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
 
     const handleSend = () => {
         if (!socket || status !== 'connected') return;
@@ -58,12 +84,19 @@ const WhatsAppSender = () => {
             alert('Please enter at least one phone number.');
             return;
         }
-        if (!message.trim()) {
-            alert('Please enter a message.');
+        if (!message.trim() && !image) {
+            alert('Please enter a message or select an image.');
             return;
         }
 
-        socket.emit('send_bulk', { message, numbers: numberList });
+        // Payload logic: if image exists, message becomes main message (or caption handled in backend)
+        socket.emit('send_bulk', { 
+            message: message, 
+            numbers: numberList,
+            image: image,
+            caption: message // Explicitly send as caption too, backend handles priority
+        });
+        
         setLogs(prev => [...prev, { type: 'info', message: `Starting bulk send to ${numberList.length} numbers...`, timestamp: new Date().toLocaleTimeString() }]);
     };
 
@@ -95,11 +128,19 @@ const WhatsAppSender = () => {
                                 <p>Connecting to server...</p>
                             </div>
                         )}
+
+                        {status === 'initializing' && (
+                             <div className="text-center text-blue-500">
+                                <RefreshCw className="w-12 h-12 mx-auto mb-3 animate-spin" />
+                                <p className="font-semibold">Starting WhatsApp Service...</p>
+                                <p className="text-xs text-slate-400 mt-2">This may take a few moments...</p>
+                            </div>
+                        )}
                         
                         {status === 'waiting_for_scan' && qrCode && (
                             <div className="text-center">
                                 <div className="bg-white p-4 rounded-lg shadow-sm mb-4 inline-block">
-                                    <QRCode value={qrCode} size={200} />
+                                    <img src={qrCode} alt="Scan QR Code" className="w-64 h-64 object-contain" />
                                 </div>
                                 <p className="text-sm text-slate-600 font-medium">Scan with WhatsApp</p>
                                 <p className="text-xs text-slate-400 mt-1">Open WhatsApp {'>'} Linked Devices {'>'} Link a Device</p>
@@ -121,11 +162,29 @@ const WhatsAppSender = () => {
                             </div>
                         )}
                         
-                        {status === 'auth_failure' && (
+                        {status === 'auto_failure' && (
                              <div className="text-center text-red-500">
                                 <AlertCircle className="w-12 h-12 mx-auto mb-3" />
                                 <p>Authentication Failed</p>
                                 <p className="text-xs mt-2">Please refresh the page and try again.</p>
+                            </div>
+                        )}
+
+                         {status === 'connection_error' && (
+                             <div className="text-center text-red-500 px-4">
+                                <AlertCircle className="w-12 h-12 mx-auto mb-3" />
+                                <p className="font-semibold">Connection Failed</p>
+                                <p className="text-xs mt-2 text-slate-600">
+                                    Cannot reach server at {window.location.hostname}:5003
+                                </p>
+                                <div className="text-[10px] text-left mt-4 bg-slate-100 p-2 rounded text-slate-500">
+                                    <p className="font-bold">Troubleshooting:</p>
+                                    <ul className="list-disc pl-3 space-y-1 mt-1">
+                                        <li>Is the backend server running?</li>
+                                        <li>Are you on the same Wi-Fi?</li>
+                                        <li><strong>Check Firewall:</strong> Allow Node.js / Port 5003.</li>
+                                    </ul>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -138,13 +197,45 @@ const WhatsAppSender = () => {
                     </h2>
 
                     <div className="space-y-4 flex-1">
+                         {/* Image Upload Area */}
+                         <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Attachment (Optional)</label>
+                            
+                            {!previewUrl ? (
+                                <div 
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="border-2 border-dashed border-slate-300 rounded-xl p-4 flex flex-col items-center justify-center text-slate-500 cursor-pointer hover:border-green-500 hover:text-green-600 transition h-32"
+                                >
+                                    <Image className="w-8 h-8 mb-2" />
+                                    <span className="text-sm">Click to upload image</span>
+                                </div>
+                            ) : (
+                                <div className="relative inline-block border border-slate-200 rounded-xl overflow-hidden">
+                                    <img src={previewUrl} alt="Preview" className="h-48 object-contain bg-slate-50" />
+                                    <button 
+                                        onClick={removeImage}
+                                        className="absolute top-2 right-2 bg-white/80 p-1 rounded-full text-red-500 hover:text-red-700 hover:bg-white transition"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            )}
+                            <input 
+                                type="file" 
+                                ref={fileInputRef} 
+                                onChange={handleImageChange} 
+                                className="hidden" 
+                                accept="image/*"
+                            />
+                        </div>
+
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Message</label>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Message {image && <span className="text-xs text-slate-400 font-normal">(Sent as caption)</span>}</label>
                             <textarea
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
                                 className="w-full h-32 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition resize-none"
-                                placeholder="Type your message here..."
+                                placeholder={image ? "Add a caption..." : "Type your message here..."}
                             ></textarea>
                         </div>
 
@@ -171,7 +262,7 @@ const WhatsAppSender = () => {
                                 `}
                             >
                                 <Send className="w-5 h-5" />
-                                Send Bulk Message
+                                {image ? 'Send Image & Message' : 'Send Bulk Message'}
                             </button>
                         </div>
                     </div>
