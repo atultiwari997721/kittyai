@@ -7,6 +7,7 @@ const { AutomationService } = require('./services/automationService');
 const http = require('http');
 const { Server } = require('socket.io');
 const WhatsAppService = require('./whatsappService');
+const instagramService = require('./services/instagramService');
 
 const path = require('path');
 dotenv.config({ path: path.join(__dirname, '.env') });
@@ -154,12 +155,33 @@ app.post('/api/automation/trigger', async (req, res) => {
   res.json({ message: 'Automation task queued successfully' });
 });
 
+// 4. Instagram: Bulk Follow
+app.post('/api/instagram/follow', async (req, res) => {
+  const { username, password, count } = req.body;
+  
+  if (!count) {
+    return res.status(400).json({ error: 'Follow count is required' });
+  }
+
+  // Trigger automation asynchronously
+  instagramService.followSuggestedUsers(username, password, count)
+    .then(result => {
+      console.log('Instagram follow result:', result);
+    })
+    .catch(err => {
+      console.error('Instagram follow error:', err);
+    });
+
+  res.json({ message: 'Instagram follow automation started' });
+});
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
-  }
+  },
+  maxHttpBufferSize: 5e7 // 50MB
 });
 
 // Initialize WhatsApp Service

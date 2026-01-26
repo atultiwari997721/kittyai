@@ -1,0 +1,7 @@
+2026/01/26-22:13:40.674 d94 Reusing MANIFEST K:\kittyai\server\instagram_session\Default\IndexedDB\https_www.instagram.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/01/26-22:13:40.674 d94 Recovering log #3
+2026/01/26-22:13:40.674 d94 Reusing old log K:\kittyai\server\instagram_session\Default\IndexedDB\https_www.instagram.com_0.indexeddb.leveldb/000003.log 
+2026/01/26-22:13:49.939 2020 Level-0 table #5: started
+2026/01/26-22:13:49.943 2020 Level-0 table #5: 23086 bytes OK
+2026/01/26-22:13:49.944 2020 Delete type=0 #3
+2026/01/26-22:13:49.944 2020 Manual compaction at level-0 from '\x00\x08\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x09\x00\x00\x00' @ 0 : 0; will stop at (end)

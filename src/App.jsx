@@ -9,12 +9,13 @@ import Signup from './components/Signup';
 import Dashboard from './components/Dashboard';
 import AdminPanel from './components/AdminPanel';
 import WhatsAppSender from './pages/WhatsAppSender';
+import KittyInstaAi from './pages/KittyInstaAi';
 import { AuthProvider } from './context/AuthContext';
 
 // Wrapper to conditionally render specific layout elements if needed
 const AppContent = () => {
   const location = useLocation();
-  const hideNavbarRoutes = ['/login', '/signup', '/dashboard', '/admin'];
+  const hideNavbarRoutes = ['/login', '/signup', '/dashboard', '/admin', '/kittyinsta'];
   const shouldHideNavbar = hideNavbarRoutes.includes(location.pathname);
 
   return (
@@ -29,6 +30,7 @@ const AppContent = () => {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/admin" element={<AdminPanel />} />
         <Route path="/whatsapp" element={<WhatsAppSender />} />
+        <Route path="/kittyinsta" element={<KittyInstaAi />} />
       </Routes>
     </div>
   );

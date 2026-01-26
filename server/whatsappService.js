@@ -63,7 +63,11 @@ class WhatsAppService {
             } else {
                 console.log('Logged out. Clearing session.');
                 if (fs.existsSync('auth_info_baileys')) {
-                    fs.rmSync('auth_info_baileys', { recursive: true, force: true });
+                    try {
+                        fs.rmSync('auth_info_baileys', { recursive: true, force: true });
+                    } catch (err) {
+                        console.error('Failed to clear session:', err.message);
+                    }
                 }
                 this.isReconnecting = false;
                 this.initialize(); 
@@ -100,20 +104,31 @@ class WhatsAppService {
             } catch (e) { console.error('Logout error', e); }
             
             if (fs.existsSync('auth_info_baileys')) {
-                fs.rmSync('auth_info_baileys', { recursive: true, force: true });
+                try {
+                    fs.rmSync('auth_info_baileys', { recursive: true, force: true });
+                } catch (err) {
+                    console.error('Failed to clear session:', err.message);
+                }
             }
             this.isConnected = false;
             this.isReconnecting = false;
             this.initialize();
         });
 
-        socket.on('send_bulk', async (data) => {
-            const { message, numbers, image, caption } = data;
+            socket.on('send_bulk', async (data) => {
+                console.log('BACKEND: Received send_bulk event', { 
+                    numbersCount: data.numbers ? data.numbers.length : 0, 
+                    hasImage: !!data.image, 
+                    hasMessage: !!data.message 
+                });
 
-            if (!this.isConnected) {
-                socket.emit('log', { type: 'error', message: 'WhatsApp not connected' });
-                return;
-            }
+                const { message, numbers, image, caption } = data;
+
+                if (!this.isConnected) {
+                    console.log('BACKEND: Failed - User not connected');
+                    socket.emit('log', { type: 'error', message: 'WhatsApp not connected. Please scan QR Code first.' });
+                    return;
+                }
 
             let successCount = 0;
             let failCount = 0;
