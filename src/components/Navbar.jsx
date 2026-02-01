@@ -1,18 +1,12 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Sparkles, Search, Zap, MessageSquare, Instagram } from 'lucide-react';
+import { Sparkles, Search, Zap, MessageSquare, Instagram, Mail } from 'lucide-react';
 import KLogo from './KLogo';
 
 const Navbar = () => {
   const location = useLocation();
 
-  const navItems = [
-    { path: '/', label: 'Home', icon: Sparkles },
-    { path: '/search', label: 'AI Search', icon: Search },
-    { path: '/creative', label: 'Studio', icon: Zap },
-    { path: '/whatsapp', label: 'WhatsApp', icon: MessageSquare },
-    { path: '/kittyinsta', label: 'InstaAi', icon: Instagram },
-  ];
+
 
   return (
 

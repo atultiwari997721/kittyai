@@ -11,7 +11,7 @@ class InstagramService {
     }
 
     async followSuggestedUsers(username, password, count) {
-        console.log(`Starting Instagram automation. Small window mode.`);
+        console.log(`Starting Home Feed automation. Goal: ${count}`);
         
         const browser = await puppeteer.launch({
             headless: false,
@@ -19,125 +19,146 @@ class InstagramService {
                 '--no-sandbox', 
                 '--disable-setuid-sandbox', 
                 '--disable-notifications',
-                '--window-size=450,800',
+                '--window-size=1000,900', // Wider window to see sidebar and feed
                 `--user-data-dir=${this.sessionPath}`
             ],
-            defaultViewport: null // Allow window size to take precedence
+            defaultViewport: null
         });
 
         const pages = await browser.pages();
         const page = pages[0];
-        // Set a smaller viewport that fits well on screen
-        await page.setViewport({ width: 450, height: 750 });
         
         try {
-            // 1. Navigate to Instagram
+            // 1. Navigate to Instagram Home
             await page.goto('https://www.instagram.com/', { waitUntil: 'networkidle2' });
             
-            console.log('Waiting for user to be logged in and ready...');
-            // Wait until we see evidence of being logged in (Direct inbox or profile icon)
-            // We give the user 2 minutes to select/log in manually if needed
+            console.log('Waiting for manual session confirmation...');
             await page.waitForFunction(() => {
                 return !!document.querySelector('a[href*="/direct/inbox/"]') || 
                        !!document.querySelector('svg[aria-label="Direct"]') ||
-                       !!document.querySelector('img[alt*="profile picture"]');
+                       !!document.querySelector('img[alt*="profile picture"]') ||
+                       !!document.querySelector('svg[aria-label="Home"]');
             }, { timeout: 120000 });
 
-            console.log('User is logged in. Starting automation in 3 seconds...');
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            console.log('Session verified. Targeting Home Feed suggestions...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            await this.handlePopups(page);
 
-            // Handle common popups automatically
-            try {
-                const notNowBtns = await page.$$('button');
-                for (const btn of notNowBtns) {
-                    const text = await page.evaluate(el => el.textContent, btn);
-                    if (text === 'Not Now') {
-                        await btn.click();
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                    }
-                }
-            } catch (e) {
-                console.log('Popup handling error (non-critical):', e.message);
-            }
-
-            // 3. Navigate to Suggestions
-            console.log('Navigating to suggestions list...');
-            await page.goto('https://www.instagram.com/explore/people/', { waitUntil: 'networkidle2' });
-
-            // 4. Start Following
             let followedCount = 0;
-            
-            while (followedCount < count) {
-                // Find "Follow" buttons
-                const followButtons = await page.$$('button');
-                const validButtons = [];
+            let refreshAttempts = 0;
+            const maxRefreshAttempts = 20;
+
+            while (followedCount < count && refreshAttempts < maxRefreshAttempts) {
+                console.log(`Scanning Home Feed (Attempt ${refreshAttempts + 1})...`);
                 
-                for (const btn of followButtons) {
-                    const text = await page.evaluate(el => el.textContent, btn);
-                    if (text === 'Follow') {
-                        validButtons.push(btn);
-                    }
-                }
+                // Ensure we are at the top to see the in-feed suggestions
+                await page.evaluate(() => window.scrollTo(0, 0));
+                await new Promise(resolve => setTimeout(resolve, 3000));
 
-                console.log(`Found ${validButtons.length} candidates to follow.`);
+                let followedOnThisPage = 0;
 
-                if (validButtons.length === 0) {
-                    console.log('End of list or no more suggestions found.');
-                    // Try scrolling to trigger more loads
-                    await page.evaluate(() => window.scrollBy(0, 800));
-                    await new Promise(resolve => setTimeout(resolve, 3000));
+                // We'll look for the "Suggestions for you" section specifically
+                // It usually contains Follow buttons. We search for the specific container if possible.
+                const followButtons = await page.evaluate(() => {
+                    // Find the "Suggestions for you" text
+                    const headings = Array.from(document.querySelectorAll('span, div, h2'));
+                    const targetHeading = headings.find(el => el.innerText.includes('Suggestions for you'));
                     
-                    // Re-check after scroll
-                    const retryButtons = await page.$$('button');
-                    let hasNew = false;
-                    for (const btn of retryButtons) {
-                        if (await page.evaluate(el => el.textContent, btn) === 'Follow') hasNew = true;
-                    }
-                    if (!hasNew) break; 
-                    continue;
-                }
+                    if (!targetHeading) return [];
 
-                for (let i = 0; i < validButtons.length && followedCount < count; i++) {
-                    const btn = validButtons[i];
-                    try {
-                        const isInteractable = await btn.isIntersectingViewport();
-                        if (!isInteractable) {
-                            await btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            await new Promise(resolve => setTimeout(resolve, 500));
+                    // Find the closest container that likely holds the carousel/list
+                    let container = targetHeading.parentElement;
+                    while (container && !container.innerText.includes('Follow')) {
+                        container = container.parentElement;
+                    }
+
+                    if (!container) return [];
+
+                    // Find all buttons inside this specific container
+                    const buttons = Array.from(container.querySelectorAll('button'));
+                    return buttons
+                        .filter(btn => btn.innerText.trim() === 'Follow')
+                        .map((btn, index) => ({
+                            index,
+                            text: btn.innerText.trim()
+                        }));
+                });
+
+                console.log(`Found ${followButtons.length} follow candidates in the home feed bar.`);
+
+                if (followButtons.length > 0) {
+                    for (let i = 0; i < followButtons.length && followedCount < count; i++) {
+                        // Re-fetch buttons to ensure reference is valid
+                        const success = await page.evaluate(async (targetIndex) => {
+                            const headings = Array.from(document.querySelectorAll('span, div, h2'));
+                            const targetHeading = headings.find(el => el.innerText.includes('Suggestions for you'));
+                            if (!targetHeading) return false;
+
+                            let container = targetHeading.parentElement;
+                            while (container && !container.innerText.includes('Follow')) {
+                                container = container.parentElement;
+                            }
+                            if (!container) return false;
+
+                            const buttons = Array.from(container.querySelectorAll('button'))
+                                .filter(btn => btn.innerText.trim() === 'Follow');
+                            
+                            if (buttons[targetIndex]) {
+                                buttons[targetIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                await new Promise(r => setTimeout(r, 500));
+                                buttons[targetIndex].click();
+                                return true;
+                            }
+                            return false;
+                        }, i);
+
+                        if (success) {
+                            followedCount++;
+                            followedOnThisPage++;
+                            console.log(`Followed: ${followedCount}/${count}`);
+                            
+                            // Human-like delay
+                            const delay = Math.floor(Math.random() * 4000) + 6000;
+                            await new Promise(resolve => setTimeout(resolve, delay));
                         }
-                        
-                        await btn.click();
-                        followedCount++;
-                        console.log(`Ai Progress: ${followedCount}/${count}`);
-
-                        // Random human-like delay
-                        const delay = Math.floor(Math.random() * 5000) + 4000;
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                    } catch (err) {
-                        console.error('Action failed:', err.message);
                     }
                 }
 
-                // Scroll down to load more
-                await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-                await new Promise(resolve => setTimeout(resolve, 4000));
+                if (followedCount < count) {
+                    console.log('Exhausted current visible suggestions. Refreshing home page...');
+                    await page.reload({ waitUntil: 'networkidle2' });
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    await this.handlePopups(page);
+                    refreshAttempts++;
+                } else {
+                    console.log('Reached follow target!');
+                }
             }
 
-            console.log(`Task Complete. Total followed: ${followedCount}`);
+            console.log(`Automation Complete. Total: ${followedCount}`);
             return { success: true, followedCount };
 
         } catch (error) {
-            console.error('Fatal Service Error:', error);
-            try {
-                await page.screenshot({ path: path.join(__dirname, '..', `insta_crash_${Date.now()}.png`) });
-            } catch (e) {}
+            console.error('Home Feed Error:', error);
             return { success: false, error: error.message };
         } finally {
-            // Give user a moment to see the final result before closing
             await new Promise(resolve => setTimeout(resolve, 5000));
             await browser.close();
-            console.log('Browser session finished.');
         }
+    }
+
+    async handlePopups(page) {
+        try {
+            const popupTexts = ['Not Now', 'Dismiss', 'Maybe Later'];
+            const buttons = await page.$$('button');
+            for (const btn of buttons) {
+                const text = await page.evaluate(el => el.innerText || el.textContent, btn);
+                if (popupTexts.some(t => text.includes(t))) {
+                    await btn.click();
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+        } catch (e) {}
     }
 }
 

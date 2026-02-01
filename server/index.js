@@ -8,6 +8,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const WhatsAppService = require('./whatsappService');
 const instagramService = require('./services/instagramService');
+const mailService = require('./services/mailService');
 
 const path = require('path');
 dotenv.config({ path: path.join(__dirname, '.env') });
@@ -173,6 +174,35 @@ app.post('/api/instagram/follow', async (req, res) => {
     });
 
   res.json({ message: 'Instagram follow automation started' });
+});
+
+// 5. Mail: Broadcast
+app.post('/api/mail/broadcast', async (req, res) => {
+  const { gmail, appPassword, recipients, subject, message } = req.body;
+
+  if (!gmail || !appPassword || !recipients || !message) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const recipientList = Array.isArray(recipients) ? recipients : recipients.split(',').map(e => e.trim());
+
+  try {
+    await mailService.createTransporter(gmail, appPassword);
+    
+    // Run broadcast in background
+    mailService.sendEmailBatch(recipientList, subject || 'Message from KittyAI', message)
+      .then(results => {
+        console.log('Broadcast completed:', results);
+      })
+      .catch(err => {
+        console.error('Broadcast failed:', err);
+      });
+
+    res.json({ message: 'Broadcast started successfully' });
+  } catch (err) {
+    console.error('Mail transporter error:', err);
+    res.status(500).json({ error: 'Failed to initialize Gmail. check your credentials or App Password.' });
+  }
 });
 
 const server = http.createServer(app);
