@@ -184,7 +184,8 @@ app.post('/api/mail/connect', async (req, res) => {
     res.json({ message: 'Gmail session connected successfully' });
   } catch (err) {
     console.error('Connection failed:', err);
-    res.status(500).json({ error: 'Failed to verify Gmail session. Please log in manually.' });
+    // Send actual error message to helping debugging
+    res.status(500).json({ error: err.message || 'Failed to verify Gmail session.' });
   }
 });
 
@@ -205,6 +206,8 @@ app.post('/api/mail/broadcast', async (req, res) => {
     })
     .catch(err => {
       console.error('Browser Broadcast failed:', err);
+      // Can't reply to res here if we already sent JSON, 
+      // but we should log it. Ideally we use sockets to updating frontend.
     });
 
   res.json({ message: `Gmail browser agent deploying for ${senderEmail || 'default account'}...` });

@@ -1,2 +1,3 @@
-2026/02/01-22:08:45.404 4558 Creating DB K:\kittyai\server\gmail_session\Default\Extension State since it was missing.
-2026/02/01-22:08:45.423 4558 Reusing MANIFEST K:\kittyai\server\gmail_session\Default\Extension State/MANIFEST-000001
+2026/02/01-22:23:27.145 2ddc Reusing MANIFEST K:\kittyai\server\gmail_session\Default\Extension State/MANIFEST-000001
+2026/02/01-22:23:27.146 2ddc Recovering log #3
+2026/02/01-22:23:27.146 2ddc Reusing old log K:\kittyai\server\gmail_session\Default\Extension State/000003.log 
