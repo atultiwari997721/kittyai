@@ -178,20 +178,23 @@ app.post('/api/instagram/follow', async (req, res) => {
 
 // 4.5 Mail: Connect Session
 app.post('/api/mail/connect', async (req, res) => {
-  const { senderEmail } = req.body;
+  const { senderEmail, appPassword } = req.body;
+  if (!senderEmail || !appPassword) {
+      return res.status(400).json({ error: 'Email and App Password are required.' });
+  }
+
   try {
-    await mailService.openSession(senderEmail);
-    res.json({ message: 'Gmail session connected successfully' });
+    await mailService.verifyConnection(senderEmail, appPassword);
+    res.json({ message: 'Connected to Gmail SMTP successfully' });
   } catch (err) {
     console.error('Connection failed:', err);
-    // Send actual error message to helping debugging
-    res.status(500).json({ error: err.message || 'Failed to verify Gmail session.' });
+    res.status(500).json({ error: err.message || 'Failed to connect.' });
   }
 });
 
 // 5. Mail: Broadcast
 app.post('/api/mail/broadcast', async (req, res) => {
-  const { recipients, subject, message, senderEmail } = req.body;
+  const { recipients, subject, message, senderEmail, appPassword } = req.body;
 
   if (!recipients || !message) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -200,17 +203,15 @@ app.post('/api/mail/broadcast', async (req, res) => {
   const recipientList = Array.isArray(recipients) ? recipients : recipients.split(',').map(e => e.trim());
 
   // Run broadcast in background
-  mailService.sendEmailBatch(recipientList, subject || 'Message from KittyAI', message, senderEmail)
+  mailService.sendEmailBatch(recipientList, subject || 'Message from KittyAI', message, senderEmail, appPassword)
     .then(results => {
-      console.log('Browser Broadcast completed:', results);
+      console.log('SMTP Broadcast completed:', results);
     })
     .catch(err => {
-      console.error('Browser Broadcast failed:', err);
-      // Can't reply to res here if we already sent JSON, 
-      // but we should log it. Ideally we use sockets to updating frontend.
+      console.error('SMTP Broadcast failed:', err);
     });
 
-  res.json({ message: `Gmail browser agent deploying for ${senderEmail || 'default account'}...` });
+  res.json({ message: `Broadcasting started for ${recipientList.length} recipients...` });
 });
 
 const server = http.createServer(app);

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 
 const MailAi = () => {
     const [senderEmail, setSenderEmail] = useState('');
+    const [appPassword, setAppPassword] = useState('');
     const [recipients, setRecipients] = useState('');
     const [subject, setSubject] = useState('');
     const [message, setMessage] = useState('');
@@ -10,17 +11,22 @@ const MailAi = () => {
     const [isConnected, setIsConnected] = useState(false);
 
     const handleConnect = async () => {
+        if (!senderEmail || !appPassword) {
+            setStatus('Please provide both Email and App Password.');
+            return;
+        }
+
         setIsLoading(true);
-        setStatus('Launching Gmail Agent...');
+        setStatus('Verifying SMTP Connection...');
         try {
             const res = await fetch('http://localhost:5003/api/mail/connect', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ senderEmail })
+                body: JSON.stringify({ senderEmail, appPassword })
             });
             const data = await res.json();
             if (res.ok) {
-                setStatus('Agent Ready. Please login in the opened browser if needed.');
+                setStatus('Connected! You can now send emails.');
                 setIsConnected(true);
             } else {
                 setStatus(`Error: ${data.error}`);
@@ -49,7 +55,8 @@ const MailAi = () => {
                     recipients: recipients, 
                     subject, 
                     message, 
-                    senderEmail 
+                    senderEmail,
+                    appPassword // Send creds with request to be stateless/safe
                 })
             });
             const data = await res.json();
@@ -82,11 +89,24 @@ const MailAi = () => {
                     </label>
                     <input 
                         type="email" 
-                        className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors mb-3"
-                        placeholder="your.email@gmail.com (Optional)"
+                        className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors mb-2"
+                        placeholder="your.email@gmail.com"
                         value={senderEmail}
                         onChange={(e) => setSenderEmail(e.target.value)}
                     />
+                    <input 
+                        type="password" 
+                        className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors mb-3"
+                        placeholder="Gmail App Password (xxxx xxxx xxxx xxxx)"
+                        value={appPassword}
+                        onChange={(e) => setAppPassword(e.target.value)}
+                    />
+                    <div className="mb-3 text-right">
+                        <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 hover:text-blue-300 underline">
+                            Get App Password
+                        </a>
+                    </div>
+
                     <button 
                         onClick={handleConnect}
                         disabled={isLoading}
@@ -97,7 +117,7 @@ const MailAi = () => {
                         }`}
                     >
                         {isLoading && !isConnected ? 'Connecting...' : 
-                         isConnected ? '✓ Agent Active' : 'Login / Open Session'}
+                         isConnected ? '✓ Connected' : 'Connect Gmail'}
                     </button>
                 </div>
 
