@@ -176,33 +176,38 @@ app.post('/api/instagram/follow', async (req, res) => {
   res.json({ message: 'Instagram follow automation started' });
 });
 
+// 4.5 Mail: Connect Session
+app.post('/api/mail/connect', async (req, res) => {
+  const { senderEmail } = req.body;
+  try {
+    await mailService.openSession(senderEmail);
+    res.json({ message: 'Gmail session connected successfully' });
+  } catch (err) {
+    console.error('Connection failed:', err);
+    res.status(500).json({ error: 'Failed to verify Gmail session. Please log in manually.' });
+  }
+});
+
 // 5. Mail: Broadcast
 app.post('/api/mail/broadcast', async (req, res) => {
-  const { gmail, appPassword, recipients, subject, message } = req.body;
+  const { recipients, subject, message, senderEmail } = req.body;
 
-  if (!gmail || !appPassword || !recipients || !message) {
+  if (!recipients || !message) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   const recipientList = Array.isArray(recipients) ? recipients : recipients.split(',').map(e => e.trim());
 
-  try {
-    await mailService.createTransporter(gmail, appPassword);
-    
-    // Run broadcast in background
-    mailService.sendEmailBatch(recipientList, subject || 'Message from KittyAI', message)
-      .then(results => {
-        console.log('Broadcast completed:', results);
-      })
-      .catch(err => {
-        console.error('Broadcast failed:', err);
-      });
+  // Run broadcast in background
+  mailService.sendEmailBatch(recipientList, subject || 'Message from KittyAI', message, senderEmail)
+    .then(results => {
+      console.log('Browser Broadcast completed:', results);
+    })
+    .catch(err => {
+      console.error('Browser Broadcast failed:', err);
+    });
 
-    res.json({ message: 'Broadcast started successfully' });
-  } catch (err) {
-    console.error('Mail transporter error:', err);
-    res.status(500).json({ error: 'Failed to initialize Gmail. check your credentials or App Password.' });
-  }
+  res.json({ message: `Gmail browser agent deploying for ${senderEmail || 'default account'}...` });
 });
 
 const server = http.createServer(app);

@@ -1,3 +1,6 @@
-2026/01/28-18:56:01.164 3e1c Reusing MANIFEST K:\kittyai\server\instagram_session\Default\Local Storage\leveldb/MANIFEST-000001
-2026/01/28-18:56:01.164 3e1c Recovering log #6
-2026/01/28-18:56:01.167 3e1c Reusing old log K:\kittyai\server\instagram_session\Default\Local Storage\leveldb/000006.log 
+2026/01/28-18:57:10.461 3590 Reusing MANIFEST K:\kittyai\server\instagram_session\Default\Local Storage\leveldb/MANIFEST-000001
+2026/01/28-18:57:10.478 3590 Recovering log #6
+2026/01/28-18:57:10.489 3590 Reusing old log K:\kittyai\server\instagram_session\Default\Local Storage\leveldb/000006.log 
+2026/01/28-18:59:24.842 33e0 Level-0 table #10: started
+2026/01/28-18:59:24.859 33e0 Level-0 table #10: 22563 bytes OK
+2026/01/28-18:59:24.864 33e0 Delete type=0 #6

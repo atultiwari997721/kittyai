@@ -74,8 +74,8 @@ const KittyInstaAi = () => {
                         <Sparkles className="w-3 h-3" />
                         AI-Powered Growth
                     </div>
-                    <h1 className="text-5xl md:text-7xl font-extrabold mb-6 tracking-tight">
-                        KittyInsta<span className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">Ai</span>
+                    <h1 className="text-5xl md:text-7xl font-extrabold mb-6 tracking-tight bg-gradient-to-r from-blue-300 to-purple-700 bg-clip-text text-transparent">
+                        KritiInst<span className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">Ai</span>
                     </h1>
                     <p className="text-slate-400 text-lg max-w-2xl mx-auto leading-relaxed">
                         The most sophisticated Instagram automation agent. <br className="hidden md:block" />

@@ -5,9 +5,14 @@ import KLogo from './KLogo';
 
 const Navbar = () => {
   const location = useLocation();
-
-
-
+  const navItems = [
+    { path: '/', label: 'Home', icon: Sparkles },
+    { path: '/search', label: 'AI Search', icon: Search },
+    { path: '/creative', label: 'Studio', icon: Zap },
+    { path: '/whatsapp', label: 'WhatsApp', icon: MessageSquare },
+    { path: '/kittyinsta', label: 'InstaAi', icon: Instagram },
+    { path: '/mailai', label: 'MailAi', icon: Mail },
+  ];
   return (
 
     <nav className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50 w-[95%] max-w-fit">
