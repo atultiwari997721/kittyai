@@ -24,12 +24,16 @@ export default async function handler(req, res) {
     const cleanKey = apiKey.trim().replace(/^["'`]|["'`]$/g, '').trim();
 
     let targetUrl = 'https://api.groq.com/openai/v1/chat/completions';
-    const headers = {
+    let headers = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${cleanKey}`
     };
 
-    if (provider === 'grok' || cleanKey.startsWith('xai-')) {
+    if (provider === 'gemini') {
+      const model = payload?.model || 'gemini-1.5-flash';
+      targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`;
+      headers = { 'Content-Type': 'application/json' };
+    } else if (provider === 'grok' || cleanKey.startsWith('xai-')) {
       targetUrl = 'https://api.x.ai/v1/chat/completions';
     } else if (provider === 'groq' || cleanKey.startsWith('gsk_')) {
       targetUrl = 'https://api.groq.com/openai/v1/chat/completions';

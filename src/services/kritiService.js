@@ -561,9 +561,11 @@ class KritiService {
       ? `User's Saved Memories: ${JSON.stringify(memories.map(m => ({ [m.key]: m.value })))}`
       : 'No prior memories saved.';
 
-    const systemPrompt = `You are KritiAI ("Your Personal AI That Gets Things Done"), a high-performance autonomous personal assistant operating on Windows, Web, and Mobile.
-${memorySnippet}
-Always be helpful, precise, technical, and provide full working code blocks with syntax highlighting when asked about coding, bugs, or scripts.`;
+    const systemPrompt = `You are KritiAI ("Your Personal AI That Gets Things Done"), an intelligent, direct, and capable personal assistant.
+Answer the user's question directly, accurately, and factually.
+Do NOT output internal thoughts, chain-of-thought tokens, self-corrections, or meta-commentary about your identity.
+Always provide clean, direct answers with proper formatting, code syntax blocks, and lists where appropriate.
+${memorySnippet}`;
 
     // 1) xAI Grok
     if (model === 'grok-2' || (grokKey && !groqKey)) {
@@ -767,7 +769,7 @@ Always be helpful, precise, technical, and provide full working code blocks with
 
         let res = null;
 
-        // Try serverless API proxy first to guarantee zero CORS and zero browser extension blocking
+        // Try serverless API proxy first
         try {
           res = await fetch('/api/chat', {
             method: 'POST',
@@ -778,7 +780,7 @@ Always be helpful, precise, technical, and provide full working code blocks with
           res = null;
         }
 
-        // Direct fetch fallback if serverless proxy not available (e.g. desktop/local)
+        // Direct fetch fallback if serverless proxy not available
         if (!res || res.status === 404 || res.status === 405) {
           res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
@@ -792,8 +794,12 @@ Always be helpful, precise, technical, and provide full working code blocks with
 
         if (res.ok) {
           const data = await res.json();
+          const raw = data.choices?.[0]?.message?.content || '';
+          const cleaned = this.cleanAiResponse(raw);
+          // Lock onto working model for instant future calls
+          this.activeGroqModel = modelCandidate;
           return {
-            reply: data.choices?.[0]?.message?.content || '',
+            reply: cleaned,
             logs: [`Model: Groq LPU (${modelCandidate})`, 'Inference: Sub-Second Ultra-Fast Groq LPUs'],
             requiresClarification: false
           };
@@ -803,7 +809,6 @@ Always be helpful, precise, technical, and provide full working code blocks with
         const errMsg = errData.error?.message || `Groq API HTTP ${res.status}`;
         lastError = new Error(errMsg);
 
-        // If invalid key, stop immediately so user is prompted with proper message
         if (res.status === 401) {
           throw lastError;
         }
@@ -820,10 +825,46 @@ Always be helpful, precise, technical, and provide full working code blocks with
     throw lastError || new Error('All Groq candidate models failed to respond.');
   }
 
-  async getLiveGroqModels(apiKey) {
-    if (this.cachedGroqModels && this.cachedGroqModels.length > 0) {
-      return this.cachedGroqModels;
+  cleanAiResponse(text) {
+    if (!text || typeof text !== 'string') return '';
+    let cleaned = text.trim();
+
+    // 1. Remove <think>...</think> reasoning blocks from DeepSeek / Qwen / Gemma models
+    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+    // 2. Remove internal self-correction and reflection blocks
+    if (cleaned.includes('Self-Correction') || cleaned.includes('Context provided in system prompt') || cleaned.startsWith('* User asks:')) {
+      const lines = cleaned.split('\n');
+      const filtered = [];
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (
+          trimmed.startsWith('* User asks:') ||
+          trimmed.startsWith('Context provided in system prompt') ||
+          trimmed.startsWith('Self-Correction') ||
+          trimmed.startsWith('* Does it violate') ||
+          trimmed.startsWith('* Is it factual?') ||
+          trimmed.startsWith('* Is it helpful')
+        ) {
+          continue;
+        }
+        filtered.push(line);
+      }
+      const candidate = filtered.join('\n').trim();
+      if (candidate) {
+        cleaned = candidate;
+      }
     }
+
+    return cleaned || text;
+  }
+
+  async getLiveGroqModels(apiKey) {
+    if (this.activeGroqModel) {
+      return [this.activeGroqModel];
+    }
+    const fallbackList = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
     try {
       const res = await fetch('https://api.groq.com/openai/v1/models', {
         headers: { 'Authorization': `Bearer ${apiKey}` }
@@ -836,14 +877,15 @@ Always be helpful, precise, technical, and provide full working code blocks with
             const l = id.toLowerCase();
             return !l.includes('whisper') && 
                    !l.includes('safeguard') && 
-                   !l.includes('moderation') &&
-                   !l.includes('vision') &&
-                   !l.includes('decommissioned') &&
-                   !l.includes('mixtral') &&
-                   !l.includes('llama3-');
+                   !l.includes('moderation') && 
+                   !l.includes('vision') && 
+                   !l.includes('decommissioned') && 
+                   !l.includes('mixtral') && 
+                   !l.includes('llama3-70b-8192') &&
+                   !l.includes('llama3-8b-8192');
           });
         if (active.length > 0) {
-          const priority = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+          const priority = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
           active.sort((a, b) => {
             const aIdx = priority.indexOf(a);
             const bIdx = priority.indexOf(b);
@@ -852,30 +894,39 @@ Always be helpful, precise, technical, and provide full working code blocks with
             if (bIdx !== -1) return 1;
             return 0;
           });
-          this.cachedGroqModels = active;
           return active;
         }
       }
     } catch (e) {
       console.warn('Groq live models fetch failed:', e);
     }
-    return ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
+    return fallbackList;
   }
 
   async getLiveGeminiModels(apiKey) {
-    if (this.cachedGeminiModels && this.cachedGeminiModels.length > 0) {
-      return this.cachedGeminiModels;
+    if (this.activeGeminiModel) {
+      return [this.activeGeminiModel];
     }
+    // Production Google Gemini models: gemini-1.5-flash is rock solid, sub-second, and universal
+    const fallbackList = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp', 'gemini-2.0-flash'];
     try {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
       if (res.ok) {
         const data = await res.json();
-        const active = (data.models || [])
-          .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+        // STRICTLY FILTER: Only gemini-* models. NEVER include gemma models!
+        const geminiModels = (data.models || [])
+          .filter(m => {
+            const name = (m.name || '').replace(/^models\//, '').toLowerCase();
+            return name.startsWith('gemini-') && 
+                   !name.includes('embedding') && 
+                   !name.includes('aqa') &&
+                   m.supportedGenerationMethods?.includes('generateContent');
+          })
           .map(m => m.name.replace(/^models\//, ''));
-        if (active.length > 0) {
-          const priority = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
-          active.sort((a, b) => {
+        
+        if (geminiModels.length > 0) {
+          const priority = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash', 'gemini-2.5-flash'];
+          geminiModels.sort((a, b) => {
             const aIdx = priority.indexOf(a);
             const bIdx = priority.indexOf(b);
             if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
@@ -883,14 +934,13 @@ Always be helpful, precise, technical, and provide full working code blocks with
             if (bIdx !== -1) return 1;
             return 0;
           });
-          this.cachedGeminiModels = active;
-          return active;
+          return geminiModels;
         }
       }
     } catch (e) {
       console.warn('Gemini live models fetch failed:', e);
     }
-    return ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+    return fallbackList;
   }
 
   /**
@@ -945,8 +995,10 @@ Always be helpful, precise, technical, and provide full working code blocks with
 
         if (res.ok) {
           const data = await res.json();
+          const raw = data.choices?.[0]?.message?.content || '';
+          const cleaned = this.cleanAiResponse(raw);
           return {
-            reply: data.choices?.[0]?.message?.content || '',
+            reply: cleaned,
             logs: [`Model: xAI Grok (${modelCandidate})`, 'Inference: xAI Cloud'],
             requiresClarification: false
           };
@@ -974,29 +1026,58 @@ Always be helpful, precise, technical, and provide full working code blocks with
     const cleanKey = this.cleanKey(apiKey);
     if (!cleanKey) throw new Error('Gemini API key is empty.');
 
-    const contents = [];
-    if (systemPrompt) {
-      contents.push({ role: 'user', parts: [{ text: systemPrompt }] });
-      contents.push({ role: 'model', parts: [{ text: 'Understood. I will act according to these instructions.' }] });
-    }
-    contents.push({ role: 'user', parts: [{ text: prompt }] });
-
     const candidateModels = await this.getLiveGeminiModels(cleanKey);
     let lastError = null;
 
     for (const modelCandidate of candidateModels) {
       try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelCandidate}:generateContent?key=${cleanKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: contents })
-        });
+        const payload = {
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: prompt }]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 2048
+          }
+        };
+
+        if (systemPrompt) {
+          payload.system_instruction = {
+            parts: [{ text: systemPrompt }]
+          };
+        }
+
+        let res = null;
+        try {
+          res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: 'gemini', apiKey: cleanKey, payload: { ...payload, model: modelCandidate } })
+          });
+        } catch {
+          res = null;
+        }
+
+        if (!res || res.status === 404 || res.status === 405) {
+          res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelCandidate}:generateContent?key=${cleanKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
 
         if (res.ok) {
           const data = await res.json();
+          const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          const cleaned = this.cleanAiResponse(raw);
+          // Lock onto this working model so future requests are instantaneous!
+          this.activeGeminiModel = modelCandidate;
           return {
-            reply: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
-            logs: [`Model: Google Gemini (${modelCandidate})`, 'Inference: Cloud (Google DeepMind)'],
+            reply: cleaned,
+            logs: [`Model: Google Gemini (${modelCandidate})`, 'Inference: Cloud (Google DeepMind) • Fast Active'],
             requiresClarification: false
           };
         }
@@ -1005,11 +1086,11 @@ Always be helpful, precise, technical, and provide full working code blocks with
         const errMsg = errData.error?.message || `Gemini API HTTP ${res.status}`;
         lastError = new Error(errMsg);
 
-        if (res.status === 400 && errMsg.includes('API_KEY_INVALID')) {
+        if (res.status === 400 && (errMsg.includes('API_KEY_INVALID') || errMsg.includes('API key not valid'))) {
           throw lastError;
         }
       } catch (err) {
-        if (err.message && err.message.includes('API_KEY_INVALID')) throw err;
+        if (err.message && (err.message.includes('API_KEY_INVALID') || err.message.includes('API key not valid'))) throw err;
         lastError = err;
       }
     }

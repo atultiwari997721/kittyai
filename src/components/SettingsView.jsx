@@ -100,7 +100,7 @@ export const SettingsView = () => {
     {
       id: 'groq-llama3',
       name: 'Groq LPUs (Fastest)',
-      badge: 'Llama 3.3 70B',
+      badge: 'Fast LPUs',
       desc: 'Sub-second real-time inference via Groq LPUs (300+ tokens/sec)'
     },
     {
@@ -111,9 +111,9 @@ export const SettingsView = () => {
     },
     {
       id: 'gemini-2.0',
-      name: 'Google Gemini 2.0 Flash',
-      badge: 'Multimodal',
-      desc: 'Google DeepMind ultra-fast reasoning model with streaming analysis'
+      name: 'Google Gemini',
+      badge: 'Flash Multimodal',
+      desc: 'Google DeepMind ultra-fast reasoning model with sub-second analysis'
     },
     {
       id: 'gpt-4o',
