@@ -1,0 +1,11 @@
+{
+  "name": "@kritiai/integrations",
+  "version": "1.0.0",
+  "description": "Integration interfaces for Gmail, Calendar, Drive, WhatsApp Business, Outlook",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

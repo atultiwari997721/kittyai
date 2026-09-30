@@ -1,0 +1,11 @@
+{
+  "name": "@kritiai/database",
+  "version": "1.0.0",
+  "description": "Database models and Supabase schema definitions for KritiAI",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

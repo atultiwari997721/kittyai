@@ -1,0 +1,11 @@
+{
+  "name": "@kritiai/agents",
+  "version": "1.0.0",
+  "description": "Multi-agent registry and orchestrator definitions for KritiAI",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

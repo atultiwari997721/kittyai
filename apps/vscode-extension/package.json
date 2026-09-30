@@ -1,0 +1,39 @@
+{
+  "name": "kritiai-vscode",
+  "displayName": "KritiAI VS Code Copilot & Agent Bridge",
+  "description": "Bridges VS Code workspace diagnostics, terminal output, and patch application with KritiAI Desktop Operating System.",
+  "version": "1.0.0",
+  "publisher": "kritiai",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages",
+    "Linters"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "kritiai.sendDiagnostics",
+        "title": "KritiAI: Send Workspace Diagnostics to Assistant"
+      },
+      {
+        "command": "kritiai.fixCurrentError",
+        "title": "KritiAI: Fix Active Error with Coding Agent"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  }
+}
