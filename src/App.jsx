@@ -1,48 +1,31 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
-import Navbar from './components/Navbar';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import MainApp from './components/MainApp';
 import Hero from './components/Hero';
-import SmartSearch from './components/SmartSearch';
-import CreativeStudio from './components/CreativeStudio';
-import Login from './components/Login';
-import Signup from './components/Signup';
-import Dashboard from './components/Dashboard';
-import AdminPanel from './components/AdminPanel';
-import WhatsAppSender from './pages/WhatsAppSender';
-import KittyInstaAi from './pages/KittyInstaAi';
-import MailAi from './pages/MailAi';
 import { AuthProvider } from './context/AuthContext';
-
-// Wrapper to conditionally render specific layout elements if needed
-const AppContent = () => {
-  const location = useLocation();
-  const hideNavbarRoutes = ['/login', '/signup', '/dashboard', '/admin'];
-  const shouldHideNavbar = hideNavbarRoutes.includes(location.pathname);
-
-  return (
-    <div className="min-h-screen bg-[#0a0d14] text-slate-100 selection:bg-fuchsia-500 selection:text-white font-sans antialiased">
-      {!shouldHideNavbar && <Navbar />}
-      <Routes>
-        <Route path="/" element={<Hero />} />
-        <Route path="/search" element={<SmartSearch />} />
-        <Route path="/creative" element={<CreativeStudio />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/admin" element={<AdminPanel />} />
-        <Route path="/whatsapp" element={<WhatsAppSender />} />
-        <Route path="/kittyinsta" element={<KittyInstaAi />} />
-        <Route path="/mailai" element={<MailAi />} />
-      </Routes>
-    </div>
-  );
-};
 
 function App() {
   return (
     <AuthProvider>
       <Router>
-        <AppContent />
+        <div className="min-h-screen bg-[#0a0d14] text-slate-100 selection:bg-fuchsia-500 selection:text-white font-sans antialiased">
+          <Routes>
+            {/* The Primary KittyAI Unified Assistant App */}
+            <Route path="/" element={<MainApp />} />
+            <Route path="/chat" element={<MainApp />} />
+            <Route path="/dashboard" element={<MainApp />} />
+            <Route path="/plugins" element={<MainApp />} />
+            <Route path="/settings" element={<MainApp />} />
+            <Route path="/memory" element={<MainApp />} />
+            <Route path="/download" element={<MainApp />} />
+
+            {/* Landing page overview if needed */}
+            <Route path="/landing" element={<Hero />} />
+
+            {/* Fallback to MainApp */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
       </Router>
     </AuthProvider>
   );
