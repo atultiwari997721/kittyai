@@ -13,11 +13,14 @@ function App() {
             {/* The Primary KittyAI Unified Assistant App */}
             <Route path="/" element={<MainApp />} />
             <Route path="/chat" element={<MainApp />} />
+            <Route path="/tasks" element={<MainApp />} />
+            <Route path="/controls" element={<MainApp />} />
             <Route path="/dashboard" element={<MainApp />} />
             <Route path="/plugins" element={<MainApp />} />
             <Route path="/settings" element={<MainApp />} />
             <Route path="/memory" element={<MainApp />} />
             <Route path="/download" element={<MainApp />} />
+            <Route path="/downloads" element={<MainApp />} />
 
             {/* Landing page overview if needed */}
             <Route path="/landing" element={<Hero />} />

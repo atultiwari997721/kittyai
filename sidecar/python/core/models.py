@@ -6,6 +6,16 @@ class IntentType(str, Enum):
     OS_NAV = "OS_NAV"
     CODE_AGENT = "CODE_AGENT"
     MEETING_AGENT = "MEETING_AGENT"
+    EMAIL_AGENT = "EMAIL_AGENT"
+    CALENDAR_AGENT = "CALENDAR_AGENT"
+    COMMUNICATION_AGENT = "COMMUNICATION_AGENT"
+    RESEARCH_AGENT = "RESEARCH_AGENT"
+    BROWSER_AGENT = "BROWSER_AGENT"
+    FILE_AGENT = "FILE_AGENT"
+    MEMORY_AGENT = "MEMORY_AGENT"
+    DOCUMENT_AGENT = "DOCUMENT_AGENT"
+    GENERAL_AGENT = "GENERAL_AGENT"
+    MULTI_AGENT = "MULTI_AGENT"
     PLUGIN_AGENT = "PLUGIN_AGENT"
     GENERAL_CHAT = "GENERAL_CHAT"
 
@@ -24,6 +34,14 @@ class AnalysisResult(BaseModel):
     reasoning: str
     targetAgent: str
     actionPlan: List[str] = []
+    goal: Optional[str] = None
+    required_agents: List[str] = Field(default_factory=list)
+    required_tools: List[str] = Field(default_factory=list)
+    required_integrations: List[str] = Field(default_factory=list)
+    risk_level: str = "low" # low, medium, high, critical
+    requires_confirmation: bool = False
+    execution_environment: str = "desktop" # desktop, cloud, hybrid
+    preferred_model: Optional[str] = "general"
     extractedEntities: ExtractedEntities = Field(default_factory=ExtractedEntities)
     recommendedModel: Optional[str] = None
 

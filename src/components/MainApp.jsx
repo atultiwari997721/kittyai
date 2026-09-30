@@ -7,71 +7,80 @@ import {
   Settings, 
   Download, 
   Monitor, 
-  ChevronRight, 
-  Radio, 
+  Clock, 
   Menu, 
-  X,
-  ExternalLink,
-  Bot,
+  X, 
+  Bot, 
+  Laptop, 
+  Sliders, 
   Zap,
-  Sliders
+  CheckCircle2,
+  AlertTriangle
 } from 'lucide-react';
 import { ChatCopilot } from './ChatCopilot';
+import { TaskCenter } from './TaskCenter';
+import { DesktopControls } from './DesktopControls';
 import { PluginsHub } from './PluginsHub';
 import { MemoryVaultView } from './MemoryVaultView';
 import { SettingsView } from './SettingsView';
 import { DownloadView } from './DownloadView';
-import { kittyService } from '../services/kittyService';
+import { kritiService } from '../services/kritiService';
 
 export const MainApp = () => {
-  const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'plugins' | 'memory' | 'settings' | 'downloads'
+  const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'tasks' | 'controls' | 'plugins' | 'memory' | 'settings' | 'downloads'
   const [sidecarOnline, setSidecarOnline] = useState(false);
-  const [quickCommand, setQuickCommand] = useState('');
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [currentModel, setCurrentModel] = useState('nvidia-nim');
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [currentModel, setCurrentModel] = useState('gemini-2.0');
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
 
   useEffect(() => {
-    const settings = kittyService.getSettings();
+    const settings = kritiService.getSettings();
     setCurrentModel(settings.activeModel);
 
     const check = async () => {
-      const online = await kittyService.checkSidecarHealth();
+      const online = await kritiService.checkSidecarHealth();
       setSidecarOnline(online);
+      const tasks = kritiService.getTasks();
+      const waiting = tasks.filter(t => t.status === 'WAITING_APPROVAL').length;
+      setPendingApprovalsCount(waiting);
     };
+
     check();
-    const interval = setInterval(check, 10000);
+    const interval = setInterval(check, 4000);
     return () => clearInterval(interval);
   }, []);
 
   const handleModelChange = (model) => {
     setCurrentModel(model);
-    kittyService.saveSettings({ activeModel: model });
+    kritiService.saveSettings({ activeModel: model });
   };
 
   const navItems = [
     { id: 'chat', label: 'Chat Copilot', icon: MessageSquare, badge: 'Live AI' },
-    { id: 'plugins', label: 'Plugins & Tools', icon: Layers, badge: '6 Active' },
+    { id: 'tasks', label: 'Task Center', icon: Clock, badge: pendingApprovalsCount > 0 ? `${pendingApprovalsCount} Action` : 'Ready', urgent: pendingApprovalsCount > 0 },
+    { id: 'controls', label: 'Desktop Controls', icon: Monitor, badge: 'Full OS' },
+    { id: 'plugins', label: 'Plugins & Mail', icon: Layers, badge: 'Tools' },
     { id: 'memory', label: 'Memory Vault', icon: BrainCircuit, badge: 'Auto-Learn' },
     { id: 'settings', label: 'Settings & APIs', icon: Settings, badge: 'Keys' },
-    { id: 'downloads', label: 'Download Windows', icon: Download, badge: '.exe/.bat' },
+    { id: 'downloads', label: 'Download Windows', icon: Download, badge: '.zip/.bat' },
   ];
 
   return (
     <div className="flex h-screen bg-[#0a0d14] text-slate-100 overflow-hidden font-sans select-none">
-      {/* Mobile Menu Backdrop */}
-      {mobileMenuOpen && (
+      {/* Mobile Drawer Backdrop */}
+      {mobileDrawerOpen && (
         <div 
-          onClick={() => setMobileMenuOpen(false)}
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 lg:hidden"
+          onClick={() => setMobileDrawerOpen(false)}
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 lg:hidden"
         />
       )}
 
-      {/* Sidebar Navigation */}
+      {/* Sidebar Navigation for Desktop */}
       <aside className={`
         fixed lg:static top-0 bottom-0 left-0 z-50
         w-64 bg-[#0d121f] border-r border-white/5
         flex flex-col justify-between p-4 flex-shrink-0 transition-transform duration-300
-        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        ${mobileDrawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         <div className="space-y-6">
           {/* Logo & Brand */}
@@ -82,16 +91,16 @@ export const MainApp = () => {
               </div>
               <div>
                 <div className="font-extrabold text-base tracking-tight bg-gradient-to-r from-fuchsia-300 via-purple-300 to-indigo-300 bg-clip-text text-transparent">
-                  KittyAI
+                  KritiAI
                 </div>
                 <div className="text-[10px] text-slate-400 font-mono tracking-wider">
-                  AUTONOMOUS ASSISTANT
+                  PERSONAL AI OS
                 </div>
               </div>
             </div>
 
             <button 
-              onClick={() => setMobileMenuOpen(false)}
+              onClick={() => setMobileDrawerOpen(false)}
               className="lg:hidden p-1 text-slate-400 hover:text-white"
             >
               <X className="w-5 h-5" />
@@ -99,7 +108,7 @@ export const MainApp = () => {
           </div>
 
           {/* Navigation Links */}
-          <nav className="space-y-1.5">
+          <nav className="space-y-1">
             {navItems.map((item) => {
               const active = activeTab === item.id;
               const Icon = item.icon;
@@ -108,9 +117,9 @@ export const MainApp = () => {
                   key={item.id}
                   onClick={() => {
                     setActiveTab(item.id);
-                    setMobileMenuOpen(false);
+                    setMobileDrawerOpen(false);
                   }}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                     active
                       ? 'bg-gradient-to-r from-fuchsia-600/30 via-purple-600/20 to-indigo-600/20 text-white border border-fuchsia-500/40 shadow-sm'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
@@ -121,7 +130,11 @@ export const MainApp = () => {
                     <span>{item.label}</span>
                   </div>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
-                    active ? 'bg-fuchsia-500/30 text-fuchsia-200' : 'bg-white/5 text-slate-400'
+                    item.urgent 
+                      ? 'bg-amber-500 text-black font-bold animate-pulse'
+                      : active 
+                      ? 'bg-fuchsia-500/30 text-fuchsia-200' 
+                      : 'bg-white/5 text-slate-400'
                   }`}>
                     {item.badge}
                   </span>
@@ -131,61 +144,60 @@ export const MainApp = () => {
           </nav>
         </div>
 
-        {/* Sidebar Footer: Sidecar Status & App Info */}
+        {/* Sidebar Footer */}
         <div className="space-y-3 pt-4 border-t border-white/5">
-          <div className="p-3 rounded-2xl bg-black/40 border border-white/5 space-y-2">
+          <div className="p-3 rounded-2xl bg-black/40 border border-white/5 space-y-1.5">
             <div className="flex items-center justify-between text-[11px]">
               <span className="flex items-center gap-1.5 font-medium">
-                <span className={`w-2 h-2 rounded-full ${sidecarOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                <span className={`w-2 h-2 rounded-full ${sidecarOnline ? 'bg-emerald-400 animate-pulse' : 'bg-cyan-400'}`} />
                 <span className="text-slate-300">
-                  {sidecarOnline ? 'Sidecar 8000 Connected' : 'Native Browser Copilot'}
+                  {sidecarOnline ? 'Windows Desktop 8000' : 'Native Browser Engine'}
                 </span>
               </span>
             </div>
             <p className="text-[10px] text-slate-500 leading-snug">
               {sidecarOnline 
-                ? 'Windows automation & Ollama active' 
-                : 'Direct inference & LocalStorage vault active'}
+                ? 'Local PyAutoGUI & Ollama active' 
+                : 'Direct inference & LocalStorage vault'}
             </p>
           </div>
 
           <div className="flex items-center justify-between px-2 text-[10px] text-slate-500 font-mono">
-            <span>KittyAI v1.0.0</span>
-            <span className="text-fuchsia-400">Local-First</span>
+            <span>KritiAI v1.0.0</span>
+            <span className="text-fuchsia-400">Windows + Web</span>
           </div>
         </div>
       </aside>
 
-      {/* Main App Content Viewport */}
+      {/* Main Viewport */}
       <main className="flex-1 flex flex-col min-w-0 bg-[#0a0d14] overflow-hidden relative">
         {/* Top Header */}
-        <header className="h-16 border-b border-white/5 px-4 sm:px-6 flex items-center justify-between bg-[#0e1322] flex-shrink-0 gap-4">
-          <div className="flex items-center gap-3">
+        <header className="h-14 sm:h-16 border-b border-white/5 px-3 sm:px-6 flex items-center justify-between bg-[#0e1322] flex-shrink-0 gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
-              onClick={() => setMobileMenuOpen(true)}
+              onClick={() => setMobileDrawerOpen(true)}
               className="lg:hidden p-2 text-slate-400 hover:text-white rounded-xl bg-white/5"
             >
               <Menu className="w-5 h-5" />
             </button>
 
-            <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400">
-              <span className="text-white font-bold capitalize">{activeTab}</span>
-              <span>/</span>
-              <span>KittyAI Assistant</span>
+            <div className="flex items-center gap-2">
+              <span className="text-white font-bold text-sm sm:text-base capitalize">{activeTab}</span>
+              <span className="hidden sm:inline text-slate-500 font-mono text-xs">/ KritiAI</span>
             </div>
           </div>
 
           {/* Model Selector & Download CTA */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-xl px-2.5 py-1.5 text-xs">
-              <Bot className="w-3.5 h-3.5 text-fuchsia-400" />
+            <div className="flex items-center gap-1 bg-black/40 border border-white/10 rounded-xl px-2 py-1 text-xs">
+              <Bot className="w-3.5 h-3.5 text-fuchsia-400 flex-shrink-0" />
               <select
                 value={currentModel}
                 onChange={(e) => handleModelChange(e.target.value)}
-                className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer"
+                className="bg-transparent text-slate-200 text-[11px] sm:text-xs focus:outline-none cursor-pointer max-w-[120px] sm:max-w-none"
               >
-                <option value="nvidia-nim" className="bg-[#111726]">NVIDIA NIM (70B)</option>
                 <option value="gemini-2.0" className="bg-[#111726]">Gemini 2.0 Flash</option>
+                <option value="nvidia-nim" className="bg-[#111726]">NVIDIA NIM (70B)</option>
                 <option value="gpt-4o" className="bg-[#111726]">OpenAI GPT-4o</option>
                 <option value="groq-llama3" className="bg-[#111726]">Groq LPU (Fast)</option>
                 <option value="ollama" className="bg-[#111726]">Local Ollama</option>
@@ -194,7 +206,7 @@ export const MainApp = () => {
 
             <button
               onClick={() => setActiveTab('downloads')}
-              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white font-medium text-xs flex items-center gap-1.5 shadow-md shadow-fuchsia-500/20 transition"
+              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white font-medium text-xs flex items-center gap-1.5 shadow-md shadow-fuchsia-500/20 transition flex-shrink-0"
             >
               <Download className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Windows App</span>
@@ -202,19 +214,55 @@ export const MainApp = () => {
           </div>
         </header>
 
-        {/* Dynamic Viewport */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        {/* Content Viewport */}
+        <div className="flex-1 overflow-y-auto p-3 sm:p-6">
           {activeTab === 'chat' && (
             <ChatCopilot 
+              onNavigateToTasks={() => setActiveTab('tasks')}
               onNavigateToMemory={() => setActiveTab('memory')}
-              onNavigateToPlugins={() => setActiveTab('plugins')}
+              onNavigateToControls={() => setActiveTab('controls')}
             />
           )}
+          {activeTab === 'tasks' && <TaskCenter />}
+          {activeTab === 'controls' && <DesktopControls />}
           {activeTab === 'plugins' && <PluginsHub />}
           {activeTab === 'memory' && <MemoryVaultView />}
           {activeTab === 'settings' && <SettingsView />}
           {activeTab === 'downloads' && <DownloadView />}
         </div>
+
+        {/* Responsive Mobile Bottom Navigation Bar (< 1024px) */}
+        <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#0d121f]/95 backdrop-blur-lg border-t border-white/10 flex lg:hidden items-center justify-around py-2 px-1">
+          {[
+            { id: 'chat', label: 'Chat', icon: MessageSquare },
+            { id: 'tasks', label: 'Tasks', icon: Clock, badge: pendingApprovalsCount },
+            { id: 'controls', label: 'Controls', icon: Monitor },
+            { id: 'memory', label: 'Memory', icon: BrainCircuit },
+            { id: 'settings', label: 'Settings', icon: Settings },
+          ].map((item) => {
+            const active = activeTab === item.id;
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl relative transition-all ${
+                  active ? 'text-fuchsia-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <div className="relative">
+                  <Icon className="w-5 h-5" />
+                  {item.badge > 0 && (
+                    <span className="absolute -top-1.5 -right-2 w-4 h-4 rounded-full bg-amber-400 text-black text-[9px] font-extrabold flex items-center justify-center animate-pulse">
+                      {item.badge}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px]">{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
       </main>
     </div>
   );

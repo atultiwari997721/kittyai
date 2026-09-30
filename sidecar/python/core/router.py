@@ -18,30 +18,47 @@ from sidecar.python.agents.plugin_agent import plugin_agent
 logger = logging.getLogger("kittyai.router")
 
 ROUTER_SYSTEM_PROMPT = """
-You are the Master Analyzer & Intent Router for KittyAI (KritiAI), an advanced autonomous personal assistant for Windows, Web, and Mobile.
-Your responsibility is to analyze multimodal user input (text command, voice transcript, or screen context) and accurately classify it into one of four core sub-agents or general chat:
+You are the Master Analyzer & Intent Router for KritiAI, an advanced autonomous personal AI operating system for Windows, Web, and Mobile.
+Analyze the user input and produce a structured JSON metadata block for the task:
 
-1. OS_NAV: Local OS navigation, window controls, settings toggles (e.g. dark/light theme, display, sound), opening apps (e.g. VS Code, Chrome, Settings), mouse/keyboard actions.
-2. CODE_AGENT: VS Code integration, terminal compilation error parsing, stack trace debugging, writing code, generating unified diffs, and applying file patches.
-3. MEETING_AGENT: Calendar schedules, meeting alerts, or autonomous call delegation (joining Google Meet, Zoom, Teams on user's behalf, recording audio, transcribing, and compiling action items).
-4. PLUGIN_AGENT: External communication services: sending or drafting Gmail emails, WhatsApp messaging, calendar sync, and connected tools.
-5. GENERAL_CHAT: Conversational questions, brainstorming, or queries that do not require OS or plugin action.
+Supported Intents:
+- OS_NAV: Windows settings, app launch, volume, themes, mouse/keyboard automation.
+- CODE_AGENT: VS Code integration, terminal compilation error parsing, debugging, writing patches.
+- MEETING_AGENT: Joining scheduled meetings, real-time transcription, executive summaries, action items.
+- EMAIL_AGENT: Gmail / Outlook email drafting, searching, reading, authorized sending.
+- CALENDAR_AGENT: Google / Microsoft calendar scheduling, conflict detection, invitations.
+- COMMUNICATION_AGENT: WhatsApp Business / export analysis, Slack, notifications.
+- RESEARCH_AGENT: Multi-source web search, fact-checking, report generation.
+- BROWSER_AGENT: Isolated Playwright browser automation, navigation, web extraction.
+- FILE_AGENT: Workspace filesystem operations, search, organization.
+- MEMORY_AGENT: Inspecting, saving, or retrieving personal contacts, concepts, preferences.
+- DOCUMENT_AGENT: PDF, DOCX, TXT summarization, OCR, conversion.
+- GENERAL_AGENT: Conversational questions, planning, or reasoning.
+- MULTI_AGENT: Complex workflow requiring sequential delegation across multiple agents.
 
-You MUST respond strictly with a valid JSON object matching this schema:
+Respond STRICTLY with JSON matching:
 {
-  "intent": "OS_NAV" | "CODE_AGENT" | "MEETING_AGENT" | "PLUGIN_AGENT" | "GENERAL_CHAT",
-  "confidence": float between 0.0 and 1.0,
+  "intent": "OS_NAV" | "CODE_AGENT" | "MEETING_AGENT" | "EMAIL_AGENT" | "CALENDAR_AGENT" | "COMMUNICATION_AGENT" | "RESEARCH_AGENT" | "BROWSER_AGENT" | "FILE_AGENT" | "MEMORY_AGENT" | "DOCUMENT_AGENT" | "GENERAL_AGENT" | "MULTI_AGENT",
+  "confidence": 0.95,
+  "goal": "Concise user goal summary",
+  "required_agents": ["coding_agent", "os_agent"],
+  "required_tools": ["filesystem.read", "terminal.run"],
+  "required_integrations": ["vscode", "gmail"],
+  "risk_level": "low" | "medium" | "high" | "critical",
+  "requires_confirmation": false,
+  "execution_environment": "desktop" | "cloud" | "hybrid",
+  "preferred_model": "coding" | "reasoning" | "general" | "fast",
   "reasoning": "brief explanation",
-  "targetAgent": "os_agent" | "coding_agent" | "meeting_agent" | "plugin_agent" | "general_assistant",
+  "targetAgent": "coding_agent",
   "actionPlan": ["step 1", "step 2"],
   "extractedEntities": {
-    "app": null or string,
-    "setting": null or string,
-    "filePath": null or string,
-    "meetingUrl": null or string,
-    "recipient": null or string,
-    "date": null or string,
-    "query": null or string
+    "app": null,
+    "setting": null,
+    "filePath": null,
+    "meetingUrl": null,
+    "recipient": null,
+    "date": null,
+    "query": null
   }
 }
 """
@@ -75,7 +92,7 @@ Additional Context: {json.dumps(context or {})}
 
         try:
             parsed = json.loads(raw_completion)
-            intent = IntentType(parsed.get("intent", "GENERAL_CHAT"))
+            intent = IntentType(parsed.get("intent", "GENERAL_AGENT"))
             entities_dict = parsed.get("extractedEntities", {})
             extracted_entities = ExtractedEntities(
                 app=entities_dict.get("app"),
@@ -89,9 +106,17 @@ Additional Context: {json.dumps(context or {})}
             analysis = AnalysisResult(
                 intent=intent,
                 confidence=float(parsed.get("confidence", 0.95)),
-                reasoning=parsed.get("reasoning", "Classified by KittyAI Master Analyzer"),
-                targetAgent=parsed.get("targetAgent", "general_assistant"),
+                reasoning=parsed.get("reasoning", "Classified by KritiAI Master Analyzer"),
+                targetAgent=parsed.get("targetAgent", "general_agent"),
                 actionPlan=parsed.get("actionPlan", []),
+                goal=parsed.get("goal", prompt),
+                required_agents=parsed.get("required_agents", [parsed.get("targetAgent", "general_agent")]),
+                required_tools=parsed.get("required_tools", []),
+                required_integrations=parsed.get("required_integrations", []),
+                risk_level=parsed.get("risk_level", "low"),
+                requires_confirmation=bool(parsed.get("requires_confirmation", False)),
+                execution_environment=parsed.get("execution_environment", "desktop"),
+                preferred_model=parsed.get("preferred_model", "general"),
                 extractedEntities=extracted_entities,
                 recommendedModel=self.orchestrator.active_model_id
             )
