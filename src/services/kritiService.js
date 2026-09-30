@@ -750,14 +750,7 @@ Always be helpful, precise, technical, and provide full working code blocks with
     }
     messages.push({ role: 'user', content: prompt });
 
-    const candidateModels = [
-      'llama-3.3-70b-versatile',
-      'llama-3.1-8b-instant',
-      'llama3-70b-8192',
-      'llama3-8b-8192',
-      'mixtral-8x7b-32768'
-    ];
-
+    const candidateModels = await this.getLiveGroqModels(cleanKey);
     let lastError = null;
 
     for (const modelCandidate of candidateModels) {
@@ -825,6 +818,79 @@ Always be helpful, precise, technical, and provide full working code blocks with
     }
 
     throw lastError || new Error('All Groq candidate models failed to respond.');
+  }
+
+  async getLiveGroqModels(apiKey) {
+    if (this.cachedGroqModels && this.cachedGroqModels.length > 0) {
+      return this.cachedGroqModels;
+    }
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/models', {
+        headers: { 'Authorization': `Bearer ${apiKey}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const active = (data.data || [])
+          .map(m => m.id)
+          .filter(id => {
+            const l = id.toLowerCase();
+            return !l.includes('whisper') && 
+                   !l.includes('safeguard') && 
+                   !l.includes('moderation') &&
+                   !l.includes('vision') &&
+                   !l.includes('decommissioned') &&
+                   !l.includes('mixtral') &&
+                   !l.includes('llama3-');
+          });
+        if (active.length > 0) {
+          const priority = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+          active.sort((a, b) => {
+            const aIdx = priority.indexOf(a);
+            const bIdx = priority.indexOf(b);
+            if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+            if (aIdx !== -1) return -1;
+            if (bIdx !== -1) return 1;
+            return 0;
+          });
+          this.cachedGroqModels = active;
+          return active;
+        }
+      }
+    } catch (e) {
+      console.warn('Groq live models fetch failed:', e);
+    }
+    return ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
+  }
+
+  async getLiveGeminiModels(apiKey) {
+    if (this.cachedGeminiModels && this.cachedGeminiModels.length > 0) {
+      return this.cachedGeminiModels;
+    }
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+      if (res.ok) {
+        const data = await res.json();
+        const active = (data.models || [])
+          .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
+          .map(m => m.name.replace(/^models\//, ''));
+        if (active.length > 0) {
+          const priority = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
+          active.sort((a, b) => {
+            const aIdx = priority.indexOf(a);
+            const bIdx = priority.indexOf(b);
+            if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+            if (aIdx !== -1) return -1;
+            if (bIdx !== -1) return 1;
+            return 0;
+          });
+          this.cachedGeminiModels = active;
+          return active;
+        }
+      }
+    } catch (e) {
+      console.warn('Gemini live models fetch failed:', e);
+    }
+    return ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
   }
 
   /**
@@ -906,6 +972,8 @@ Always be helpful, precise, technical, and provide full working code blocks with
 
   async callGeminiApi(prompt, apiKey, systemPrompt = null) {
     const cleanKey = this.cleanKey(apiKey);
+    if (!cleanKey) throw new Error('Gemini API key is empty.');
+
     const contents = [];
     if (systemPrompt) {
       contents.push({ role: 'user', parts: [{ text: systemPrompt }] });
@@ -913,22 +981,39 @@ Always be helpful, precise, technical, and provide full working code blocks with
     }
     contents.push({ role: 'user', parts: [{ text: prompt }] });
 
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${cleanKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: contents })
-    });
+    const candidateModels = await this.getLiveGeminiModels(cleanKey);
+    let lastError = null;
 
-    if (res.ok) {
-      const data = await res.json();
-      return {
-        reply: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
-        logs: ['Model: Google Gemini 2.0 Flash', 'Inference: Cloud (Google DeepMind)'],
-        requiresClarification: false
-      };
+    for (const modelCandidate of candidateModels) {
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelCandidate}:generateContent?key=${cleanKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: contents })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          return {
+            reply: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
+            logs: [`Model: Google Gemini (${modelCandidate})`, 'Inference: Cloud (Google DeepMind)'],
+            requiresClarification: false
+          };
+        }
+
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.error?.message || `Gemini API HTTP ${res.status}`;
+        lastError = new Error(errMsg);
+
+        if (res.status === 400 && errMsg.includes('API_KEY_INVALID')) {
+          throw lastError;
+        }
+      } catch (err) {
+        if (err.message && err.message.includes('API_KEY_INVALID')) throw err;
+        lastError = err;
+      }
     }
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.error?.message || `Gemini API HTTP ${res.status}`);
+    throw lastError || new Error('All Gemini candidate models failed to respond.');
   }
 
   async callOpenAiApi(prompt, apiKey, systemPrompt = null) {
@@ -1059,8 +1144,12 @@ Always be helpful, precise, technical, and provide full working code blocks with
           headers: { 'Authorization': `Bearer ${cleanKey}` }
         });
         if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          const models = (data.data || []).map(m => m.id);
+          this.cachedGroqModels = models;
+          const topModel = models.find(m => m.includes('120b') || m.includes('20b') || m.includes('qwen') || m.includes('llama')) || models[0] || 'GPT-OSS 120B';
           this.saveSettings({ groqApiKey: cleanKey, activeModel: 'groq-llama3' });
-          return { success: true, message: 'Groq API Key Verified! Ultra-Fast LPUs Active.', provider: 'groq' };
+          return { success: true, message: `Groq API Key Verified! Model ${topModel} Active.`, provider: 'groq', models };
         }
 
         // If Groq fails with 401, check if user inadvertently supplied an xAI key
@@ -1081,7 +1170,14 @@ Always be helpful, precise, technical, and provide full working code blocks with
       // 3. Google Gemini
       if (provider === 'gemini') {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${cleanKey}`);
-        if (res.ok) return { success: true, message: 'Gemini API Key Verified Successfully!' };
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          const models = (data.models || []).map(m => m.name.replace(/^models\//, ''));
+          this.cachedGeminiModels = models;
+          const topModel = models.find(m => m.includes('flash') || m.includes('pro')) || 'Gemini Flash';
+          this.saveSettings({ geminiApiKey: cleanKey, activeModel: 'gemini-2.0' });
+          return { success: true, message: `Gemini API Key Verified! Model ${topModel} Active.`, provider: 'gemini', models };
+        }
         const data = await res.json().catch(() => ({}));
         return { success: false, message: data.error?.message || 'Invalid Gemini API key.' };
       }

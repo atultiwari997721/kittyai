@@ -69,12 +69,12 @@ class LLMOrchestrator:
 
         # Groq (Free / High Speed)
         models.append(ModelInfoModel(
-            id="groq:llama-3.3-70b-versatile",
-            name="Groq - Llama 3.3 70B Versatile",
+            id="groq:openai/gpt-oss-120b",
+            name="Groq - GPT-OSS 120B",
             provider="groq",
             isLocal=False,
             supportsVision=False,
-            description="Super-fast cloud inference with Llama 3.3"
+            description="Super-fast cloud inference with GPT-OSS 120B on Groq LPUs"
         ))
         models.append(ModelInfoModel(
             id="groq:deepseek-r1-distill-llama-70b",
@@ -310,19 +310,20 @@ class LLMOrchestrator:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
 
-            payload = {
-                "model": "llama-3.3-70b-versatile",
-                "messages": messages,
-                "temperature": 0.2
-            }
-            if json_mode:
-                payload["response_format"] = {"type": "json_object"}
+            for candidate in ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"]:
+                payload = {
+                    "model": candidate,
+                    "messages": messages,
+                    "temperature": 0.2
+                }
+                if json_mode:
+                    payload["response_format"] = {"type": "json_object"}
 
-            res = await client.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
-            if res.status_code == 200:
-                data = res.json()
-                return data["choices"][0]["message"]["content"]
-        return None
+                res = await client.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
+                if res.status_code == 200:
+                    data = res.json()
+                    return data["choices"][0]["message"]["content"]
+            return None
 
     async def _generate_openai(
         self,

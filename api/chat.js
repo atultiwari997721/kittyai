@@ -33,6 +33,13 @@ export default async function handler(req, res) {
       targetUrl = 'https://api.x.ai/v1/chat/completions';
     } else if (provider === 'groq' || cleanKey.startsWith('gsk_')) {
       targetUrl = 'https://api.groq.com/openai/v1/chat/completions';
+      // Sanitize decommissioned Groq models
+      if (payload && payload.model) {
+        const m = payload.model.toLowerCase();
+        if (m.includes('mixtral') || m.includes('llama3-') || m.includes('versatile') || m.includes('8b-instant')) {
+          payload.model = 'openai/gpt-oss-120b';
+        }
+      }
     } else if (provider === 'openai') {
       targetUrl = 'https://api.openai.com/v1/chat/completions';
     } else if (provider === 'nvidia') {

@@ -385,9 +385,9 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
   ];
 
   const modelsList = [
-    { id: 'groq-llama3', label: '⚡ Groq (Llama 3.3 70B)', hasKey: !!(kritiService.getApiKey('groq') && !kritiService.getApiKey('groq').startsWith('xai-')) },
+    { id: 'groq-llama3', label: '⚡ Groq LPUs (GPT-OSS / Fast)', hasKey: !!(kritiService.getApiKey('groq') && !kritiService.getApiKey('groq').startsWith('xai-')) },
     { id: 'grok-2', label: '✨ xAI Grok (Grok 2)', hasKey: !!(kritiService.getApiKey('grok') || (kritiService.getApiKey('groq') && kritiService.getApiKey('groq').startsWith('xai-'))) },
-    { id: 'gemini-2.0', label: '💎 Gemini 2.0 Flash', hasKey: !!kritiService.getApiKey('gemini') },
+    { id: 'gemini-2.0', label: '💎 Google Gemini (Flash)', hasKey: !!kritiService.getApiKey('gemini') },
     { id: 'gpt-4o', label: '🧠 OpenAI GPT-4o', hasKey: !!kritiService.getApiKey('openai') },
     { id: 'nvidia-nim', label: '🚀 NVIDIA NIM (70B)', hasKey: !!kritiService.getApiKey('nvidia') },
     { id: 'ollama', label: '💻 Local Ollama (Offline)', hasKey: true }
