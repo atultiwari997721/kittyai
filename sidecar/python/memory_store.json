@@ -1,0 +1,26 @@
+{
+  "team": {
+    "key": "team",
+    "displayKey": "team",
+    "value": {
+      "rawText": "The team is Alice (alice@company.com) and Bob (bob@company.com), WhatsApp +1234567890",
+      "emails": [
+        "alice@company.com",
+        "bob@company.com"
+      ],
+      "phones": [
+        "+1234567890"
+      ],
+      "members": [
+        "The",
+        "Alice",
+        "Bob"
+      ]
+    },
+    "category": "entity",
+    "description": "Personal record for 'team' provided during task clarification",
+    "source": "user_clarification",
+    "updatedAt": "2026-09-30T18:20:12.409189+00:00",
+    "createdAt": "2026-09-30T18:20:12.409189+00:00"
+  }
+}

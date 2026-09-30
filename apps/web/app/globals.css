@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-[#0a0d14] text-slate-100;
+  }
+}
+
+.glass-panel {
+  background: rgba(17, 23, 38, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cyber-card {
+  background: #111726;
+  border: 1px solid #1f293d;
+}

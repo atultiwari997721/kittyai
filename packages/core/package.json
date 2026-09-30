@@ -1,0 +1,15 @@
+{
+  "name": "@kittyai/core",
+  "version": "1.0.0",
+  "description": "Shared core types, interfaces, and API SDK for KittyAI Assistant",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
