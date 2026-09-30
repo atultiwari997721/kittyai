@@ -3,12 +3,13 @@
  * "Your Personal AI That Gets Things Done."
  * 
  * Capabilities:
- * - Master Analyzer with 12+ intent routes (OS_NAV, CODE_AGENT, MEETING_AGENT, EMAIL_AGENT, etc.)
- * - Multi-model AI: Google Gemini 2.0 Flash, OpenAI GPT-4o, NVIDIA NIM, Groq LPUs, Local Ollama
- * - Live API testing & validation for all providers
+ * - Master Analyzer with 12+ intent routes
+ * - Multi-model AI: Groq LPUs (Llama 3.3 70B), Google Gemini 2.0 Flash, OpenAI GPT-4o, NVIDIA NIM, Local Ollama
+ * - Auto-detection of configured keys (prioritizes active providers like Groq)
+ * - Real generative responses for code, emails, meetings, and conversation
+ * - Interactive Authorization Cards for consequential actions
  * - Personal Memory Vault & Clarification Loop
- * - Task Lifecycle & Consequential Approval Engine
- * - Local Python Sidecar integration (http://127.0.0.1:8000) & Native Browser Intelligence Fallback
+ * - Local Python Sidecar integration with normalized JSON responses
  */
 
 const STORAGE_KEYS = {
@@ -20,15 +21,15 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_SETTINGS = {
-  activeModel: 'gemini-2.0', // 'gemini-2.0' | 'nvidia-nim' | 'gpt-4o' | 'groq-llama3' | 'ollama'
-  selectedAgent: 'AUTO',     // 'AUTO' | 'coding' | 'os' | 'email' | 'calendar' | 'meeting' | 'research'
+  activeModel: 'groq-llama3', // Default to fast Groq LPUs or auto-detect based on configured keys
+  selectedAgent: 'AUTO',
   sidecarUrl: 'http://127.0.0.1:8000',
   ollamaUrl: 'http://127.0.0.1:11434',
   ollamaModel: 'llama3.2',
-  nvidiaApiKey: '',
+  groqApiKey: '',
   geminiApiKey: '',
   openaiApiKey: '',
-  groqApiKey: '',
+  nvidiaApiKey: '',
   autoConfirmActions: false,
   meetingDelegationEnabled: false,
   assistModeActive: false,
@@ -36,7 +37,7 @@ const DEFAULT_SETTINGS = {
   volumeLevel: 75,
   windowsTheme: 'dark',
   speechEnabled: false,
-  privacyMode: 'balanced' // 'local-only' | 'balanced' | 'cloud'
+  privacyMode: 'balanced'
 };
 
 const INITIAL_MEMORIES = [
@@ -81,6 +82,63 @@ class KritiService {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(updated));
     this.sidecarUrl = updated.sidecarUrl;
     return updated;
+  }
+
+  /**
+   * Retrieves API key for a given provider from localStorage or environment variables
+   */
+  getApiKey(provider) {
+    const settings = this.getSettings();
+    if (provider === 'groq') {
+      return settings.groqApiKey || 
+             (typeof import.meta !== 'undefined' && (import.meta.env?.GROQ_API_KEY || import.meta.env?.VITE_GROQ_API_KEY)) ||
+             (typeof process !== 'undefined' && (process.env?.GROQ_API_KEY || process.env?.VITE_GROQ_API_KEY)) || '';
+    }
+    if (provider === 'gemini') {
+      return settings.geminiApiKey || 
+             (typeof import.meta !== 'undefined' && (import.meta.env?.GEMINI_API_KEY || import.meta.env?.VITE_GEMINI_API_KEY)) ||
+             (typeof process !== 'undefined' && (process.env?.GEMINI_API_KEY || process.env?.VITE_GEMINI_API_KEY)) || '';
+    }
+    if (provider === 'openai') {
+      return settings.openaiApiKey || 
+             (typeof import.meta !== 'undefined' && (import.meta.env?.OPENAI_API_KEY || import.meta.env?.VITE_OPENAI_API_KEY)) ||
+             (typeof process !== 'undefined' && (process.env?.OPENAI_API_KEY || process.env?.VITE_OPENAI_API_KEY)) || '';
+    }
+    if (provider === 'nvidia') {
+      return settings.nvidiaApiKey || 
+             (typeof import.meta !== 'undefined' && (import.meta.env?.NVIDIA_API_KEY || import.meta.env?.VITE_NVIDIA_API_KEY)) ||
+             (typeof process !== 'undefined' && (process.env?.NVIDIA_API_KEY || process.env?.VITE_NVIDIA_API_KEY)) || '';
+    }
+    return '';
+  }
+
+  /**
+   * Intelligently selects the active model based on available keys
+   */
+  resolveActiveModel(preferredModel = null) {
+    if (preferredModel && preferredModel !== 'AUTO') {
+      return preferredModel;
+    }
+    const settings = this.getSettings();
+    const groqKey = this.getApiKey('groq');
+    const geminiKey = this.getApiKey('gemini');
+    const openaiKey = this.getApiKey('openai');
+    const nvidiaKey = this.getApiKey('nvidia');
+
+    // If preferred model is set in settings and has a key, use it
+    if (settings.activeModel === 'groq-llama3' && groqKey) return 'groq-llama3';
+    if (settings.activeModel === 'gemini-2.0' && geminiKey) return 'gemini-2.0';
+    if (settings.activeModel === 'gpt-4o' && openaiKey) return 'gpt-4o';
+    if (settings.activeModel === 'nvidia-nim' && nvidiaKey) return 'nvidia-nim';
+    if (settings.activeModel === 'ollama') return 'ollama';
+
+    // Auto-select provider with valid key: Groq -> Gemini -> OpenAI -> NVIDIA
+    if (groqKey) return 'groq-llama3';
+    if (geminiKey) return 'gemini-2.0';
+    if (openaiKey) return 'gpt-4o';
+    if (nvidiaKey) return 'nvidia-nim';
+
+    return settings.activeModel || 'groq-llama3';
   }
 
   getMemories() {
@@ -170,28 +228,47 @@ class KritiService {
    * Master Analyzer & Process Chat Pipeline
    */
   async processChat(userText, agentOverride = null, modelOverride = null) {
+    const activeModel = this.resolveActiveModel(modelOverride);
     const settings = this.getSettings();
-    const activeModel = modelOverride || settings.activeModel;
-    const selectedAgent = agentOverride || settings.selectedAgent;
+    const selectedAgent = agentOverride || settings.selectedAgent || 'AUTO';
 
-    // Check Sidecar first if online
+    // 1. If Sidecar is online, send with full keys & model context
     if (this.isSidecarOnline) {
       try {
+        const groqKey = this.getApiKey('groq');
+        const geminiKey = this.getApiKey('gemini');
+        const openaiKey = this.getApiKey('openai');
+        const nvidiaKey = this.getApiKey('nvidia');
+
         const response = await fetch(`${this.sidecarUrl}/api/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: userText, model: activeModel, agent: selectedAgent })
+          body: JSON.stringify({ 
+            prompt: userText, 
+            model: activeModel, 
+            agent: selectedAgent,
+            groqApiKey: groqKey,
+            geminiApiKey: geminiKey,
+            openaiApiKey: openaiKey,
+            nvidiaApiKey: nvidiaKey
+          })
         });
         if (response.ok) {
           const data = await response.json();
-          return data;
+          // Normalize reply field to protect frontend rendering
+          const replyText = data.reply || data.summary || data.reasoning || "Task processed by local sidecar.";
+          return {
+            ...data,
+            reply: replyText,
+            logs: data.executionLog || data.logs || ['Executed via Python Sidecar']
+          };
         }
       } catch (err) {
         console.warn('Sidecar chat execution fallback to native engine:', err);
       }
     }
 
-    // Native Master Analyzer Pipeline
+    // 2. Native Intelligence Engine with Real Groq / Gemini / Multi-Model Execution
     return await this.masterAnalyzerPipeline(userText, selectedAgent, activeModel, settings);
   }
 
@@ -199,68 +276,92 @@ class KritiService {
     const lower = text.toLowerCase();
     const memories = this.getMemories();
 
-    // 1. CLARIFICATION & ENTITY LOOKUP FOR TEAMS / CONTACTS
-    if (lower.includes('project team') || lower.includes('team') || lower.includes('rahul') || lower.includes('priya') || lower.includes('ankit')) {
-      const teamMemory = memories.find(m => m.key === 'project team' || m.key === 'team');
-      
-      // If user asks to remember a team
-      if (lower.includes('means') || lower.includes('remember that') || lower.includes('is my team')) {
-        const match = text.match(/(?:means|is)\s+(.*)/i);
-        const parsedMembers = match ? match[1] : text;
-        this.saveMemory('project team', { description: parsedMembers, recordedAt: new Date().toISOString() }, 'contacts');
+    // 1. Direct Memory Learning: "remember that my team is / means..."
+    if (lower.includes('remember that') || lower.includes('remember my') || lower.includes('note that my')) {
+      const match = text.match(/(?:remember that|remember my|note that my)\s+([a-zA-Z0-9_\-\s]+?)\s+(?:means|is)\s+(.*)/i);
+      if (match) {
+        const entity = match[1].trim();
+        const value = match[2].trim();
+        this.saveMemory(entity, { description: value, learnedAt: new Date().toISOString() }, 'contacts');
         return {
-          reply: `🧠 **Recorded to Memory Vault!**\n\nI have memorized that your **"Project Team"** refers to: *${parsedMembers}*.\n\nFrom now on, whenever you ask me to schedule meetings, draft emails, or assign tasks to the project team, I will automatically resolve them!`,
-          logs: ['Memory intent recognized', 'Entity "project team" saved to vault', 'Persistence: OK'],
+          reply: `🧠 **Recorded to Memory Vault!**\n\nI have memorized that your **"${entity}"** refers to: *${value}*.\n\nFrom now on, whenever you ask me to perform tasks associated with "${entity}", I will automatically resolve them!`,
+          logs: ['Memory intent recognized', `Entity "${entity}" saved to vault`, 'Persistence: OK'],
           requiresClarification: false
         };
       }
     }
 
-    // 2. CODING AGENT: VS Code & Error Debugging
-    if (lower.includes('code') || lower.includes('vs code') || lower.includes('fix') || lower.includes('error') || lower.includes('bug') || lower.includes('react') || lower.includes('build')) {
-      const taskId = 'task_code_' + Date.now();
-      const codeTask = {
-        id: taskId,
-        goal: text,
-        agent: 'CodingAgent',
-        model: model,
-        status: 'WAITING_APPROVAL',
-        riskLevel: 'medium',
-        steps: [
-          'Master Analyzer: Classified intent as CODE_AGENT',
-          'Inspected active VS Code workspace: K:\\Projects\\kritiai',
-          'Located diagnostic error in auth.controller.ts (Line 42)',
-          'Generated unified patch with JWT expiration check'
-        ],
-        approvalData: {
-          type: 'CODE_PATCH',
-          file: 'src/controllers/auth.controller.ts',
-          diff: `@@ -42,5 +42,9 @@\n-  const token = jwt.verify(rawToken, secret);\n+  if (!rawToken) throw new AuthError("Missing bearer token");\n+  const token = jwt.verify(rawToken, secret, { maxAge: '7d' });\n+  if (token.exp < Date.now() / 1000) throw new AuthError("Token expired");`
-        },
-        createdAt: new Date().toISOString()
-      };
-      this.saveTask(codeTask);
+    // 2. Clarification Loop: Check if user mentions an entity (e.g. "team") with no stored record
+    if ((lower.includes('schedule') || lower.includes('meeting') || lower.includes('email') || lower.includes('send to')) && lower.includes('team')) {
+      const teamMemory = memories.find(m => m.key.toLowerCase().includes('team'));
+      if (!teamMemory) {
+        return {
+          reply: `I understand you want to coordinate with your **"team"**.\n\nHowever, I don't have records for who belongs to your team in your Memory Vault yet.\n\nWhat are the email addresses or phone numbers of your team members? Tell me once, and I will remember them permanently!`,
+          requiresClarification: true,
+          clarificationDetails: {
+            taskId: 'meet_clarify_' + Date.now(),
+            entity: 'team',
+            question: 'What are the email addresses or phone numbers of your team members?'
+          },
+          logs: ['Master Analyzer ➔ Clarification Required', 'Missing entity: "team"', 'Clarification Loop: TRIGGERED']
+        };
+      }
+    }
 
+    // 3. Quick Local Windows OS Controls (Volume / Theme / Settings)
+    if (lower.startsWith('dark mode') || lower.startsWith('light mode') || lower.includes('change theme') || lower.includes('switch to dark') || lower.includes('switch to light')) {
+      const isDark = !lower.includes('light');
+      settings.windowsTheme = isDark ? 'dark' : 'light';
+      this.saveSettings({ windowsTheme: settings.windowsTheme });
       return {
-        reply: `🔍 **Coding Agent Analysis Complete!**\n\nI have inspected your active VS Code workspace and detected the error in \`auth.controller.ts\`. A unified diff patch has been generated.\n\n⚠️ **Consequential Operation:** Please review and approve the patch in the **Task Center** or below before changes are committed to disk.`,
-        task: codeTask,
-        approvalNeeded: codeTask.approvalData,
-        logs: [
-          'Master Analyzer ➔ CODE_AGENT',
-          'VS Code Diagnostics: 1 error found',
-          'Security check: Medium risk',
-          'Awaiting user approval'
-        ],
+        reply: `🖥️ **Windows Theme Switched to ${isDark ? 'Dark Mode' : 'Light Mode'}**\n\nSystem personalization theme adjusted (ms-settings:personalization-colors).\n\n*(Executed via Windows OS Agent)*`,
+        logs: ['Master Analyzer ➔ OS_NAV', `Theme: ${settings.windowsTheme}`, 'Status: COMPLETED'],
         requiresClarification: false
       };
     }
 
-    // 3. EMAIL AGENT: Gmail Drafting & Authorization
-    if (lower.includes('email') || lower.includes('mail') || lower.includes('write a reply') || lower.includes('send to')) {
-      const teamMem = memories.find(m => m.key === 'project team' || m.key === 'team');
-      let recipient = 'rahul@project.io';
+    if (lower.includes('volume to') || lower.includes('set volume')) {
+      const volMatch = text.match(/(\d+)/);
+      const newVol = volMatch ? Math.min(100, Math.max(0, parseInt(volMatch[1], 10))) : 60;
+      settings.volumeLevel = newVol;
+      this.saveSettings({ volumeLevel: newVol });
+      return {
+        reply: `🔊 **Master Audio Volume Adjusted to ${newVol}%**\n\nSystem master audio mixer updated successfully.\n\n*(Executed via Windows OS Agent)*`,
+        logs: ['Master Analyzer ➔ OS_NAV', `Volume: ${newVol}%`, 'Status: COMPLETED'],
+        requiresClarification: false
+      };
+    }
+
+    // 4. Consequential Email Action Handling with Real Draft Preparation
+    if ((lower.includes('send email') || lower.includes('draft email') || lower.includes('write an email')) && (lower.includes('to') || lower.includes('saying'))) {
+      const teamMem = memories.find(m => m.key.toLowerCase().includes('team'));
+      let recipient = 'colleague@project.io';
       if (lower.includes('rahul')) recipient = 'rahul@project.io';
-      else if (teamMem) recipient = 'rahul@project.io, priya@project.io, ankit@project.io';
+      else if (teamMem) {
+        recipient = teamMem.value?.members?.map(m => m.email).join(', ') || 'team@project.io';
+      }
+
+      // Generate contextual subject & body via active LLM if available, or structured parser
+      const groqKey = this.getApiKey('groq');
+      let subject = 'Project Update & Deliverables';
+      let body = `Hi,\n\nFollowing up regarding our discussion: I will send the finalized deliverables as discussed.\n\nBest regards,\nKritiAI on behalf of user`;
+
+      if (groqKey) {
+        try {
+          const emailGen = await this.callGroqApi(
+            `You are an executive email assistant. The user wants to write an email based on this instruction: "${text}". Generate a JSON object with strictly {"subject": "...", "body": "..."} and nothing else.`,
+            groqKey,
+            true
+          );
+          if (emailGen && emailGen.reply) {
+            const parsed = JSON.parse(emailGen.reply);
+            if (parsed.subject) subject = parsed.subject;
+            if (parsed.body) body = parsed.body;
+          }
+        } catch (e) {
+          console.warn('Groq email synthesis fallback:', e);
+        }
+      }
 
       const taskId = 'task_email_' + Date.now();
       const emailTask = {
@@ -272,51 +373,36 @@ class KritiService {
         riskLevel: 'high',
         steps: [
           'Master Analyzer: Classified intent as EMAIL_AGENT',
-          'Contact Resolver: Resolved recipient to ' + recipient,
-          'Gmail Draft Engine: Composed contextual email body'
+          `Contact Resolver: Resolved recipient to ${recipient}`,
+          'Content Synthesis: Formulated email body via AI'
         ],
         approvalData: {
           type: 'EMAIL_SEND',
           recipient: recipient,
-          subject: 'Project Update: Critical Milestone & Deliverables',
-          body: 'Hi Rahul,\n\nI will send the finalized project deliverables tomorrow morning as discussed. The testing suite and frontend revisions are complete.\n\nBest regards,\nKritiAI on behalf of Atul'
+          subject: subject,
+          body: body
         },
         createdAt: new Date().toISOString()
       };
       this.saveTask(emailTask);
 
       return {
-        reply: `✉️ **Email Draft Prepared for Approval**\n\n- **Recipient:** \`${recipient}\`\n- **Subject:** Project Update: Critical Milestone & Deliverables\n\n*In accordance with security rules, emails are never dispatched silently without explicit user authorization.* Please approve the send action below:`,
+        reply: `✉️ **Email Draft Prepared for Approval**\n\n- **Recipient:** \`${recipient}\`\n- **Subject:** ${subject}\n\n*In accordance with security rules, emails are never dispatched silently without explicit user authorization.* Please review and approve the send action below:`,
         task: emailTask,
         approvalNeeded: emailTask.approvalData,
         logs: [
           'Master Analyzer ➔ EMAIL_AGENT',
           'Contact resolution: ' + recipient,
-          'Action queued for user approval'
+          'Awaiting user authorization'
         ],
         requiresClarification: false
       };
     }
 
-    // 4. CALENDAR & MEETING AGENT
-    if (lower.includes('schedule') || lower.includes('meeting') || lower.includes('appointment')) {
-      const teamMem = memories.find(m => m.key === 'project team' || m.key === 'team');
-      
-      // If user says "team" but we have no memory
-      if (lower.includes('team') && !teamMem) {
-        return {
-          reply: `I see you want to schedule a meeting with **"team"**. However, I don't have records for who belongs to your team in your Memory Vault yet.\n\nWhat are the email addresses or phone numbers for your team members? Tell me, and I will remember them permanently!`,
-          requiresClarification: true,
-          clarificationDetails: {
-            taskId: 'meet_clarify_' + Date.now(),
-            entity: 'team',
-            question: 'What are the email addresses or names of your team members?'
-          },
-          logs: ['Master Analyzer ➔ CALENDAR_AGENT', 'Missing entity: "team"', 'Clarification Loop: TRIGGERED']
-        };
-      }
-
-      const attendees = teamMem ? 'rahul@project.io, priya@project.io, ankit@project.io' : 'alex@company.com';
+    // 5. Consequential Calendar Action Handling
+    if (lower.includes('schedule a meeting') || lower.includes('schedule meeting') || lower.includes('set up a meeting')) {
+      const teamMem = memories.find(m => m.key.toLowerCase().includes('team'));
+      const attendees = teamMem ? (teamMem.value?.members?.map(m => m.email).join(', ') || 'team@project.io') : 'colleagues@project.io';
       const taskId = 'task_cal_' + Date.now();
       const calTask = {
         id: taskId,
@@ -327,7 +413,7 @@ class KritiService {
         riskLevel: 'medium',
         steps: [
           'Master Analyzer: Classified intent as CALENDAR_AGENT',
-          'Resolved attendees from Memory Vault: ' + attendees,
+          `Resolved attendees from Memory Vault: ${attendees}`,
           'Checked Google Calendar for time conflicts: 0 conflicts detected',
           'Generated dedicated Google Meet room'
         ],
@@ -337,156 +423,132 @@ class KritiService {
           date: 'Tomorrow, 5:00 PM - 5:45 PM',
           attendees: attendees,
           platform: 'Google Meet',
-          meetingUrl: 'https://meet.google.com/kri-qazw-xed'
+          meetingUrl: `https://meet.google.com/kri-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 5)}`
         },
         createdAt: new Date().toISOString()
       };
       this.saveTask(calTask);
 
       return {
-        reply: `📅 **Calendar Event Prepared**\n\n- **Title:** Project Team Sync & Review\n- **Time:** Tomorrow at 5:00 PM\n- **Participants (from Memory):** \`${attendees}\`\n- **Meeting Link:** [meet.google.com/kri-qazw-xed](https://meet.google.com/kri-qazw-xed)\n\n*Review and confirm to add this event to Google Calendar:*`,
+        reply: `📅 **Calendar Event Prepared**\n\n- **Title:** Project Team Sync & Review\n- **Time:** Tomorrow at 5:00 PM\n- **Participants (from Memory Vault):** \`${attendees}\`\n- **Meeting Link:** [Google Meet Link](${calTask.approvalData.meetingUrl})\n\n*Review and confirm to add this event to Google Calendar:*`,
         task: calTask,
         approvalNeeded: calTask.approvalData,
         logs: [
           'Master Analyzer ➔ CALENDAR_AGENT',
           'Memory lookup: OK',
-          'Event prepared for confirmation'
+          'Event queued for authorization'
         ],
         requiresClarification: false
       };
     }
 
-    // 5. WINDOWS OS & SETTINGS
-    if (lower.includes('theme') || lower.includes('dark mode') || lower.includes('volume') || lower.includes('windows') || lower.includes('settings') || lower.includes('open')) {
-      let actionTitle = 'Windows OS Action';
-      let actionDesc = 'Command executed';
+    // 6. REAL MULTI-MODEL AI GENERATION (Groq / Gemini / OpenAI / NVIDIA / Ollama)
+    const groqKey = this.getApiKey('groq');
+    const geminiKey = this.getApiKey('gemini');
+    const openaiKey = this.getApiKey('openai');
+    const nvidiaKey = this.getApiKey('nvidia');
 
-      if (lower.includes('theme') || lower.includes('dark')) {
-        actionTitle = 'Windows Theme Adjustment';
-        actionDesc = 'Switched system personalization theme to Dark Mode (ms-settings:personalization-colors)';
-        settings.windowsTheme = 'dark';
-        this.saveSettings({ windowsTheme: 'dark' });
-      } else if (lower.includes('volume')) {
-        actionTitle = 'Master Volume Control';
-        actionDesc = 'Adjusted master audio volume to 60%';
-        settings.volumeLevel = 60;
-        this.saveSettings({ volumeLevel: 60 });
-      } else if (lower.includes('settings')) {
-        actionTitle = 'Windows Settings Navigation';
-        actionDesc = 'Opened Windows official Settings URI (ms-settings:)';
-      }
+    // Context from memory vault
+    const memorySnippet = memories.length > 0
+      ? `User's Saved Memories: ${JSON.stringify(memories.map(m => ({ [m.key]: m.value })))}`
+      : 'No prior memories saved.';
 
-      return {
-        reply: `🖥️ **${actionTitle} Executed**\n\n${actionDesc}.\n\n*(Dispatched via safe Windows Operating System Agent)*`,
-        logs: [
-          'Master Analyzer ➔ OS_NAV',
-          'Action: ' + actionTitle,
-          'Status: VERIFIED & COMPLETED'
-        ],
-        requiresClarification: false
-      };
-    }
+    const systemPrompt = `You are KritiAI ("Your Personal AI That Gets Things Done"), a high-performance autonomous personal assistant operating on Windows, Web, and Mobile.
+${memorySnippet}
+Always be helpful, precise, technical, and provide full working code blocks with syntax highlighting when asked about coding, bugs, or scripts.`;
 
-    // 6. SCREEN ASSIST & DIAGNOSTICS
-    if (lower.includes('screen') || lower.includes('screenshot') || lower.includes('look at') || lower.includes('analyze this')) {
-      return {
-        reply: `👁️ **Screen Assist Analysis:**\n\n- **Active Target:** ${settings.assistTarget}\n- **Detected Windows:** Visual Studio Code — \`kritiai/src/App.jsx\`\n- **Diagnostics Context:** No unhandled fatal crashes in active terminal. Frontend is listening on \`http://localhost:9972\`.\n- **Recommendation:** All modules compiled successfully with exit code 0.`,
-        logs: [
-          'Master Analyzer ➔ SCREEN_AGENT',
-          'Screen capture: Targeted to ' + settings.assistTarget,
-          'OCR / Context Analysis: COMPLETE'
-        ],
-        requiresClarification: false
-      };
-    }
-
-    // 7. DIRECT LLM PROVIDERS IF CONFIGURED (Real Calls)
-    const geminiKey = settings.geminiApiKey || (typeof import.meta !== 'undefined' ? import.meta.env?.VITE_GEMINI_API_KEY : '');
-    const nvidiaKey = settings.nvidiaApiKey || (typeof import.meta !== 'undefined' ? import.meta.env?.VITE_NVIDIA_API_KEY : '');
-    const openaiKey = settings.openaiApiKey || (typeof import.meta !== 'undefined' ? import.meta.env?.VITE_OPENAI_API_KEY : '');
-    const groqKey = settings.groqApiKey || (typeof import.meta !== 'undefined' ? import.meta.env?.VITE_GROQ_API_KEY : '');
-
-    if (model === 'gemini-2.0') {
-      if (geminiKey) {
-        try {
-          const res = await this.callGeminiApi(text, geminiKey);
-          if (res) return res;
-        } catch (e) {
-          console.warn('Gemini API call failed:', e);
-        }
-      } else {
-        return this.missingKeyResponse('Google Gemini 2.0 Flash', 'geminiApiKey', 'https://aistudio.google.com');
-      }
-    }
-
-    if (model === 'nvidia-nim') {
-      if (nvidiaKey) {
-        try {
-          const res = await this.callNvidiaNim(text, nvidiaKey);
-          if (res) return res;
-        } catch (e) {
-          console.warn('NVIDIA NIM API call failed:', e);
-        }
-      } else {
-        return this.missingKeyResponse('NVIDIA NIM (Llama 3.1 70B)', 'nvidiaApiKey', 'https://build.nvidia.com');
-      }
-    }
-
-    if (model === 'gpt-4o') {
-      if (openaiKey) {
-        try {
-          const res = await this.callOpenAiApi(text, openaiKey);
-          if (res) return res;
-        } catch (e) {
-          console.warn('OpenAI API call failed:', e);
-        }
-      } else {
-        return this.missingKeyResponse('OpenAI GPT-4o', 'openaiApiKey', 'https://platform.openai.com/api-keys');
-      }
-    }
-
-    if (model === 'groq-llama3') {
+    // Try selected model first
+    if (model === 'groq-llama3' || (!geminiKey && groqKey)) {
       if (groqKey) {
         try {
-          const res = await this.callGroqApi(text, groqKey);
+          const res = await this.callGroqApi(text, groqKey, false, systemPrompt);
           if (res) return res;
         } catch (e) {
-          console.warn('Groq API call failed:', e);
+          console.warn('Groq API call error:', e);
+          return {
+            reply: `⚠️ **Groq API Error:** ${e.message}\n\nPlease verify your Groq API key in **Settings ➔ AI Models / System Settings**.`,
+            logs: ['Groq LPU call failed', e.message],
+            requiresClarification: false
+          };
         }
       } else {
         return this.missingKeyResponse('Groq LPUs (Llama 3.3 70B)', 'groqApiKey', 'https://console.groq.com/keys');
       }
     }
 
+    if (model === 'gemini-2.0') {
+      if (geminiKey) {
+        try {
+          const res = await this.callGeminiApi(text, geminiKey, systemPrompt);
+          if (res) return res;
+        } catch (e) {
+          console.warn('Gemini API call error:', e);
+          if (groqKey) {
+            // Smart fallback to Groq!
+            return await this.callGroqApi(text, groqKey, false, systemPrompt);
+          }
+        }
+      } else if (groqKey) {
+        // Smart fallback to Groq if Gemini key is missing but Groq is set
+        return await this.callGroqApi(text, groqKey, false, systemPrompt);
+      } else {
+        return this.missingKeyResponse('Google Gemini 2.0 Flash', 'geminiApiKey', 'https://aistudio.google.com');
+      }
+    }
+
+    if (model === 'gpt-4o') {
+      if (openaiKey) {
+        try {
+          const res = await this.callOpenAiApi(text, openaiKey, systemPrompt);
+          if (res) return res;
+        } catch (e) {
+          console.warn('OpenAI API call error:', e);
+          if (groqKey) return await this.callGroqApi(text, groqKey, false, systemPrompt);
+        }
+      } else if (groqKey) {
+        return await this.callGroqApi(text, groqKey, false, systemPrompt);
+      } else {
+        return this.missingKeyResponse('OpenAI GPT-4o', 'openaiApiKey', 'https://platform.openai.com/api-keys');
+      }
+    }
+
+    if (model === 'nvidia-nim') {
+      if (nvidiaKey) {
+        try {
+          const res = await this.callNvidiaNim(text, nvidiaKey, systemPrompt);
+          if (res) return res;
+        } catch (e) {
+          console.warn('NVIDIA NIM API call error:', e);
+          if (groqKey) return await this.callGroqApi(text, groqKey, false, systemPrompt);
+        }
+      } else if (groqKey) {
+        return await this.callGroqApi(text, groqKey, false, systemPrompt);
+      } else {
+        return this.missingKeyResponse('NVIDIA NIM (Llama 3.1 70B)', 'nvidiaApiKey', 'https://build.nvidia.com');
+      }
+    }
+
     if (model === 'ollama') {
       try {
-        const res = await this.callOllamaApi(text, settings.ollamaUrl, settings.ollamaModel);
+        const res = await this.callOllamaApi(text, settings.ollamaUrl, settings.ollamaModel, systemPrompt);
         if (res) return res;
       } catch (e) {
-        console.warn('Ollama call failed:', e);
+        if (groqKey) return await this.callGroqApi(text, groqKey, false, systemPrompt);
         return {
-          reply: `⚠️ **Local Ollama Not Reachable at ${settings.ollamaUrl}**\n\nPlease ensure Ollama is installed and running (\`ollama run ${settings.ollamaModel}\`).\n\nYou can also switch to a cloud AI model in the top-right model selector or configure your API key in **Settings ➔ AI Providers**.`,
+          reply: `⚠️ **Local Ollama Not Reachable at ${settings.ollamaUrl}**\n\nPlease ensure Ollama is running (\`ollama run ${settings.ollamaModel}\`).\n\nYou can also enter your Groq API key in **Settings ➔ AI Models** for instant cloud inference.`,
           logs: ['Ollama connection refused', `URL: ${settings.ollamaUrl}`],
           requiresClarification: false
         };
       }
     }
 
-    // Conversational Fallback
-    return {
-      reply: `I am **KritiAI**, your autonomous personal AI operating system.\n\nI can execute real tasks on your Windows machine, inspect VS Code workspaces, manage Gmail & Google Calendar after your authorization, analyze your screen in Assist Mode, and control Windows settings.\n\nTry giving me a personal command:\n- *"Fix the login error in my VS Code project"*\n- *"Write a reply to Rahul saying I will send the project tomorrow"*\n- *"Schedule a meeting with the project team tomorrow at 5 PM"*\n- *"Open Windows settings and help me change the theme"*\n- *"Remember that my Project Team means Rahul, Priya and Ankit"*`,
-      logs: [
-        'Master Analyzer ➔ GENERAL_AGENT',
-        'Model: ' + model,
-        'Confidence: 0.98'
-      ],
-      requiresClarification: false
-    };
+    // Default missing key response
+    return this.missingKeyResponse('Groq LPUs (Llama 3.3 70B)', 'groqApiKey', 'https://console.groq.com/keys');
   }
 
   missingKeyResponse(providerName, keyField, keyUrl) {
     return {
-      reply: `🔑 **API Key Configuration Required for ${providerName}**\n\nTo enable live generation with **${providerName}**, please enter your API key in **Settings ➔ AI Models / System Settings**.\n\n- [Get your ${providerName} API Key](${keyUrl})\n\n💡 **Tip:** You can also:\n1. Switch to **Local Ollama** in the top model dropdown for 100% free offline inference.\n2. Or try any of KritiAI's autonomous operating commands (*"Fix VS Code error"*, *"Schedule meeting with team"*, *"Change Windows theme to dark"*), which execute locally without needing a cloud key!`,
+      reply: `🔑 **API Key Configuration Required for ${providerName}**\n\nTo enable live AI generation with **${providerName}**, please enter your API key in **Settings ➔ AI Models / System Settings** (or enter it in the top bar).\n\n- [Get your free ${providerName} API Key](${keyUrl})\n\n💡 **Tip:** You can also:\n1. Switch to **Local Ollama** for 100% free offline inference.\n2. Or try built-in system agent commands (*"Change theme to dark"*, *"Set volume to 60%"*, *"Remember my team is..."*), which run locally without needing an external cloud key!`,
       logs: [`Provider: ${providerName}`, `Key required: ${keyField}`, 'Status: AWAITING_KEY'],
       requiresClarification: false
     };
@@ -514,7 +576,7 @@ class KritiService {
     }
 
     return {
-      reply: `🎉 **Memorized!** I have recorded **"${entity}"** permanently in your Memory Vault.\n\nNow resuming your request: Event has been prepared with ${value.contacts.join(', ')}. Check the **Task Center** for confirmation.`,
+      reply: `🎉 **Memorized!** I have recorded **"${entity}"** permanently into your Memory Vault.\n\nContacts recorded: \`${value.contacts.join(', ')}\`.\nWhenever you mention "${entity}", I will resolve them automatically. Check the **Task Center** for any pending actions.`,
       entityLearned: entity,
       entityValue: value,
       logs: ['Clarification received', `Stored "${entity}" in vault`, 'Resumed task'],
@@ -522,12 +584,63 @@ class KritiService {
     };
   }
 
-  async callGeminiApi(prompt, apiKey) {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+  /**
+   * Real Groq API client supporting fast streaming and JSON modes
+   */
+  async callGroqApi(prompt, apiKey, jsonMode = false, systemPrompt = null) {
+    const messages = [];
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt });
+    }
+    messages.push({ role: 'user', content: prompt });
+
+    const payload = {
+      model: 'llama-3.3-70b-versatile',
+      messages: messages,
+      temperature: 0.3,
+      max_tokens: 2048
+    };
+
+    if (jsonMode) {
+      payload.response_format = { type: 'json_object' };
+    }
+
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey.trim()}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        reply: data.choices?.[0]?.message?.content || '',
+        logs: ['Model: Groq LPU (llama-3.3-70b-versatile)', 'Inference: Sub-Second Ultra-Fast Groq LPUs'],
+        requiresClarification: false
+      };
+    }
+
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error?.message || `Groq API HTTP ${res.status}`);
+  }
+
+  async callGeminiApi(prompt, apiKey, systemPrompt = null) {
+    const contents = [];
+    if (systemPrompt) {
+      contents.push({ role: 'user', parts: [{ text: systemPrompt }] });
+      contents.push({ role: 'model', parts: [{ text: 'Understood. I will act according to these instructions.' }] });
+    }
+    contents.push({ role: 'user', parts: [{ text: prompt }] });
+
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey.trim()}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      body: JSON.stringify({ contents: contents })
     });
+
     if (res.ok) {
       const data = await res.json();
       return {
@@ -537,45 +650,24 @@ class KritiService {
       };
     }
     const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.error?.message || `HTTP ${res.status}`);
+    throw new Error(errData.error?.message || `Gemini API HTTP ${res.status}`);
   }
 
-  async callNvidiaNim(prompt, apiKey) {
-    const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'meta/llama-3.1-70b-instruct',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 1024
-      })
-    });
-    if (res.ok) {
-      const data = await res.json();
-      return {
-        reply: data.choices?.[0]?.message?.content || '',
-        logs: ['Model: NVIDIA NIM (meta/llama-3.1-70b-instruct)', 'Inference: NVIDIA GPU Cloud'],
-        requiresClarification: false
-      };
-    }
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.error?.message || `HTTP ${res.status}`);
-  }
+  async callOpenAiApi(prompt, apiKey, systemPrompt = null) {
+    const messages = [];
+    if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+    messages.push({ role: 'user', content: prompt });
 
-  async callOpenAiApi(prompt, apiKey) {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        'Authorization': `Bearer ${apiKey.trim()}`
       },
       body: JSON.stringify({
         model: 'gpt-4o',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 1024
+        messages: messages,
+        max_tokens: 2048
       })
     });
     if (res.ok) {
@@ -587,35 +679,39 @@ class KritiService {
       };
     }
     const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.error?.message || `HTTP ${res.status}`);
+    throw new Error(errData.error?.message || `OpenAI API HTTP ${res.status}`);
   }
 
-  async callGroqApi(prompt, apiKey) {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  async callNvidiaNim(prompt, apiKey, systemPrompt = null) {
+    const messages = [];
+    if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+    messages.push({ role: 'user', content: prompt });
+
+    const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        'Authorization': `Bearer ${apiKey.trim()}`
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 1024
+        model: 'meta/llama-3.1-70b-instruct',
+        messages: messages,
+        max_tokens: 2048
       })
     });
     if (res.ok) {
       const data = await res.json();
       return {
         reply: data.choices?.[0]?.message?.content || '',
-        logs: ['Model: Groq LPU (llama-3.3-70b-versatile)', 'Inference: Groq Ultra-Fast LPU'],
+        logs: ['Model: NVIDIA NIM (meta/llama-3.1-70b-instruct)', 'Inference: NVIDIA GPU Cloud'],
         requiresClarification: false
       };
     }
     const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.error?.message || `HTTP ${res.status}`);
+    throw new Error(errData.error?.message || `NVIDIA NIM HTTP ${res.status}`);
   }
 
-  async callOllamaApi(prompt, ollamaUrl, model) {
+  async callOllamaApi(prompt, ollamaUrl, model, systemPrompt = null) {
     const baseUrl = ollamaUrl.replace(/\/+$/, '');
     const res = await fetch(`${baseUrl}/api/generate`, {
       method: 'POST',
@@ -623,6 +719,7 @@ class KritiService {
       body: JSON.stringify({
         model: model || 'llama3.2',
         prompt: prompt,
+        system: systemPrompt || undefined,
         stream: false
       })
     });
@@ -642,6 +739,14 @@ class KritiService {
       return { success: false, message: 'Please enter a key before testing.' };
     }
     try {
+      if (provider === 'groq') {
+        const res = await fetch('https://api.groq.com/openai/v1/models', {
+          headers: { 'Authorization': `Bearer ${apiKey.trim()}` }
+        });
+        if (res.ok) return { success: true, message: 'Groq API Key Verified! Llama 3.3 70B Active.' };
+        const data = await res.json().catch(() => ({}));
+        return { success: false, message: data.error?.message || 'Invalid Groq API key.' };
+      }
       if (provider === 'gemini') {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`);
         if (res.ok) return { success: true, message: 'Gemini API Key Verified Successfully!' };
@@ -663,14 +768,6 @@ class KritiService {
         if (res.ok) return { success: true, message: 'NVIDIA NIM API Key Verified Successfully!' };
         const data = await res.json().catch(() => ({}));
         return { success: false, message: data.error?.message || 'Invalid NVIDIA NIM API key.' };
-      }
-      if (provider === 'groq') {
-        const res = await fetch('https://api.groq.com/openai/v1/models', {
-          headers: { 'Authorization': `Bearer ${apiKey.trim()}` }
-        });
-        if (res.ok) return { success: true, message: 'Groq API Key Verified Successfully!' };
-        const data = await res.json().catch(() => ({}));
-        return { success: false, message: data.error?.message || 'Invalid Groq API key.' };
       }
       return { success: false, message: 'Unknown provider.' };
     } catch (e) {

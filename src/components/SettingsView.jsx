@@ -14,7 +14,8 @@ import {
   Database,
   Sparkles,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  Zap
 } from 'lucide-react';
 import { kritiService } from '../services/kritiService';
 
@@ -28,6 +29,15 @@ export const SettingsView = () => {
 
   useEffect(() => {
     checkSidecar();
+    // Prefill from environment or defaults if missing in local state
+    setSettings(prev => ({
+      ...prev,
+      groqApiKey: prev.groqApiKey || kritiService.getApiKey('groq'),
+      geminiApiKey: prev.geminiApiKey || kritiService.getApiKey('gemini'),
+      openaiApiKey: prev.openaiApiKey || kritiService.getApiKey('openai'),
+      nvidiaApiKey: prev.nvidiaApiKey || kritiService.getApiKey('nvidia'),
+      activeModel: kritiService.resolveActiveModel(prev.activeModel)
+    }));
   }, []);
 
   const checkSidecar = async () => {
@@ -54,16 +64,16 @@ export const SettingsView = () => {
 
   const models = [
     {
+      id: 'groq-llama3',
+      name: 'Groq LPUs (Fastest)',
+      badge: 'Llama 3.3 70B',
+      desc: 'Sub-second real-time inference via Groq LPUs (300+ tokens/sec)'
+    },
+    {
       id: 'gemini-2.0',
       name: 'Google Gemini 2.0 Flash',
       badge: 'Multimodal',
       desc: 'Google DeepMind ultra-fast reasoning model with streaming analysis'
-    },
-    {
-      id: 'nvidia-nim',
-      name: 'NVIDIA NIM (Cloud)',
-      badge: 'Llama 3.1 70B',
-      desc: 'High-performance cloud inference via NVIDIA integrate.api.nvidia.com'
     },
     {
       id: 'gpt-4o',
@@ -72,10 +82,10 @@ export const SettingsView = () => {
       desc: 'OpenAI flagship model with versatile tool execution & code intelligence'
     },
     {
-      id: 'groq-llama3',
-      name: 'Groq LPUs (Fast)',
-      badge: 'Llama 3.3 70B',
-      desc: 'Sub-second real-time inference via Groq LPUs'
+      id: 'nvidia-nim',
+      name: 'NVIDIA NIM (Cloud)',
+      badge: 'Llama 3.1 70B',
+      desc: 'High-performance cloud inference via NVIDIA integrate.api.nvidia.com'
     },
     {
       id: 'ollama',
@@ -96,7 +106,7 @@ export const SettingsView = () => {
           <div>
             <h1 className="text-xl font-extrabold text-white">System Settings & AI Orchestration</h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              Configure multi-model AI keys, local sidecar connectivity, and privacy modes
+              Configure multi-model AI keys, Groq LPUs, local sidecar connectivity, and privacy modes
             </p>
           </div>
         </div>
@@ -135,7 +145,10 @@ export const SettingsView = () => {
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-white">{m.name}</span>
+                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                      {m.id === 'groq-llama3' && <Zap className="w-3.5 h-3.5 text-amber-400" />}
+                      <span>{m.name}</span>
+                    </span>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
                       isSelected ? 'bg-fuchsia-500/30 text-fuchsia-300' : 'bg-white/5 text-slate-400'
                     }`}>
@@ -160,8 +173,51 @@ export const SettingsView = () => {
           </p>
 
           <div className="space-y-4 text-xs">
+            {/* Groq LPUs (Fastest) */}
+            <div className="space-y-1.5 p-3.5 rounded-2xl bg-black/40 border border-fuchsia-500/30">
+              <div className="flex items-center justify-between">
+                <label className="text-slate-200 font-bold flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Groq API Key (Recommended • Ultra-Fast LPUs)</span>
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => testKey('groq', settings.groqApiKey)}
+                    disabled={keyTesting.groq || !settings.groqApiKey}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-fuchsia-600/30 hover:bg-fuchsia-600/50 text-fuchsia-200 border border-fuchsia-500/40 transition disabled:opacity-40"
+                  >
+                    {keyTesting.groq ? 'Testing...' : 'Test Key'}
+                  </button>
+                  <a 
+                    href="https://console.groq.com/keys" 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="text-fuchsia-400 hover:underline flex items-center gap-1 text-[11px]"
+                  >
+                    Get Free Groq Key <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+              <input
+                type="password"
+                placeholder="gsk_..."
+                value={settings.groqApiKey}
+                onChange={(e) => setSettings(prev => ({ ...prev, groqApiKey: e.target.value }))}
+                className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono"
+              />
+              {keyResults.groq && (
+                <div className={`p-2 rounded-lg text-[11px] flex items-center gap-1.5 ${
+                  keyResults.groq.success ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950/60 text-rose-300 border border-rose-500/30'
+                }`}>
+                  {keyResults.groq.success ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                  <span>{keyResults.groq.message}</span>
+                </div>
+              )}
+            </div>
+
             {/* Google Gemini */}
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 p-3 rounded-2xl bg-black/20 border border-white/5">
               <div className="flex items-center justify-between">
                 <label className="text-slate-300 font-medium flex items-center gap-1.5">
                   <span>Google Gemini API Key</span>
@@ -204,7 +260,7 @@ export const SettingsView = () => {
             </div>
 
             {/* OpenAI */}
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 p-3 rounded-2xl bg-black/20 border border-white/5">
               <div className="flex items-center justify-between">
                 <label className="text-slate-300 font-medium flex items-center gap-1.5">
                   <span>OpenAI API Key</span>
@@ -247,7 +303,7 @@ export const SettingsView = () => {
             </div>
 
             {/* NVIDIA NIM */}
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 p-3 rounded-2xl bg-black/20 border border-white/5">
               <div className="flex items-center justify-between">
                 <label className="text-slate-300 font-medium flex items-center gap-1.5">
                   <span>NVIDIA NIM API Key</span>
@@ -285,49 +341,6 @@ export const SettingsView = () => {
                 }`}>
                   {keyResults.nvidia.success ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
                   <span>{keyResults.nvidia.message}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Groq */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-slate-300 font-medium flex items-center gap-1.5">
-                  <span>Groq API Key</span>
-                  <span className="text-[10px] text-slate-500 font-normal">(Llama 3.3 70B Fast LPU)</span>
-                </label>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => testKey('groq', settings.groqApiKey)}
-                    disabled={keyTesting.groq || !settings.groqApiKey}
-                    className="text-[11px] px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 transition disabled:opacity-40"
-                  >
-                    {keyTesting.groq ? 'Testing...' : 'Test Key'}
-                  </button>
-                  <a 
-                    href="https://console.groq.com/keys" 
-                    target="_blank" 
-                    rel="noreferrer"
-                    className="text-fuchsia-400 hover:underline flex items-center gap-1 text-[11px]"
-                  >
-                    Get Groq Key <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-              </div>
-              <input
-                type="password"
-                placeholder="gsk_..."
-                value={settings.groqApiKey}
-                onChange={(e) => setSettings(prev => ({ ...prev, groqApiKey: e.target.value }))}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono"
-              />
-              {keyResults.groq && (
-                <div className={`p-2 rounded-lg text-[11px] flex items-center gap-1.5 ${
-                  keyResults.groq.success ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950/60 text-rose-300 border border-rose-500/30'
-                }`}>
-                  {keyResults.groq.success ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
-                  <span>{keyResults.groq.message}</span>
                 </div>
               )}
             </div>

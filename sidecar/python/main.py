@@ -314,7 +314,23 @@ async def chat_execute(req: ChatRequest):
     Checks personal memory for entities; if ambiguous/missing, returns needsClarification=True.
     Otherwise, executes multi-step plan autonomously.
     """
-    return await autonomous_planner.plan_and_execute(req.prompt, req.context)
+    if req.groqApiKey:
+        settings.GROQ_API_KEY = req.groqApiKey
+    if req.geminiApiKey:
+        settings.GEMINI_API_KEY = req.geminiApiKey
+    if req.openaiApiKey:
+        settings.OPENAI_API_KEY = req.openaiApiKey
+    if req.nvidiaApiKey:
+        settings.NVIDIA_API_KEY = req.nvidiaApiKey
+    if req.model:
+        provider = "groq" if "groq" in req.model else ("gemini" if "gemini" in req.model else ("openai" if "gpt" in req.model else ("nvidia" if "nvidia" in req.model else "ollama")))
+        orchestrator.set_active_model(req.model, provider)
+
+    res = await autonomous_planner.plan_and_execute(req.prompt, req.context)
+    if isinstance(res, dict) and "reply" not in res:
+        res["reply"] = res.get("summary") or res.get("reasoning") or "Action executed successfully."
+    return res
+
 
 @app.post("/api/chat/clarify")
 async def chat_clarify(req: ClarificationRequest):

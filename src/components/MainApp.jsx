@@ -30,12 +30,11 @@ export const MainApp = () => {
   const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'tasks' | 'controls' | 'plugins' | 'memory' | 'settings' | 'downloads'
   const [sidecarOnline, setSidecarOnline] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  const [currentModel, setCurrentModel] = useState('gemini-2.0');
+  const [currentModel, setCurrentModel] = useState(kritiService.resolveActiveModel());
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
 
   useEffect(() => {
-    const settings = kritiService.getSettings();
-    setCurrentModel(settings.activeModel);
+    setCurrentModel(kritiService.resolveActiveModel());
 
     const check = async () => {
       const online = await kritiService.checkSidecarHealth();
@@ -54,6 +53,7 @@ export const MainApp = () => {
     setCurrentModel(model);
     kritiService.saveSettings({ activeModel: model });
   };
+
 
   const navItems = [
     { id: 'chat', label: 'Chat Copilot', icon: MessageSquare, badge: 'Live AI' },
@@ -194,14 +194,15 @@ export const MainApp = () => {
               <select
                 value={currentModel}
                 onChange={(e) => handleModelChange(e.target.value)}
-                className="bg-transparent text-slate-200 text-[11px] sm:text-xs focus:outline-none cursor-pointer max-w-[120px] sm:max-w-none"
+                className="bg-transparent text-slate-200 text-[11px] sm:text-xs focus:outline-none cursor-pointer max-w-[140px] sm:max-w-none font-medium"
               >
-                <option value="gemini-2.0" className="bg-[#111726]">Gemini 2.0 Flash</option>
-                <option value="nvidia-nim" className="bg-[#111726]">NVIDIA NIM (70B)</option>
-                <option value="gpt-4o" className="bg-[#111726]">OpenAI GPT-4o</option>
-                <option value="groq-llama3" className="bg-[#111726]">Groq LPU (Fast)</option>
-                <option value="ollama" className="bg-[#111726]">Local Ollama</option>
+                <option value="groq-llama3" className="bg-[#111726]">⚡ Groq (Llama 3.3 70B)</option>
+                <option value="gemini-2.0" className="bg-[#111726]">💎 Gemini 2.0 Flash</option>
+                <option value="gpt-4o" className="bg-[#111726]">🧠 OpenAI GPT-4o</option>
+                <option value="nvidia-nim" className="bg-[#111726]">🚀 NVIDIA NIM (70B)</option>
+                <option value="ollama" className="bg-[#111726]">💻 Local Ollama (Offline)</option>
               </select>
+
             </div>
 
             <button

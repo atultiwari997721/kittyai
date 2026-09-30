@@ -135,8 +135,15 @@ class MemorySaveRequest(BaseModel):
 class ChatRequest(BaseModel):
     prompt: str
     context: Optional[Dict[str, Any]] = None
+    model: Optional[str] = None
+    agent: Optional[str] = None
+    groqApiKey: Optional[str] = None
+    geminiApiKey: Optional[str] = None
+    openaiApiKey: Optional[str] = None
+    nvidiaApiKey: Optional[str] = None
 
 class ClarificationRequest(BaseModel):
     taskId: str
     response: str
+
 
