@@ -23,6 +23,7 @@ import {
   X
 } from 'lucide-react';
 import { kritiService } from '../services/kritiService';
+import { IntegrationGuideModal } from './IntegrationGuideModal';
 
 export const PluginsHub = () => {
   // Plugin toggles
@@ -34,6 +35,10 @@ export const PluginsHub = () => {
     codeAgent: true,
     webScraper: true
   });
+
+  // Integration guide modal state
+  const [showGuideModal, setShowGuideModal] = useState(false);
+  const [guideTab, setGuideTab] = useState('gmail');
 
   // Google OAuth modal state
   const [showGoogleModal, setShowGoogleModal] = useState(false);
@@ -126,7 +131,18 @@ export const PluginsHub = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => {
+              setGuideTab('gmail');
+              setShowGuideModal(true);
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border bg-rose-950/60 border-rose-500/40 text-rose-300 hover:bg-rose-900/50 transition"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span>How to Integrate Services</span>
+          </button>
+
           <button
             onClick={() => setShowGoogleModal(true)}
             className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition ${
@@ -204,7 +220,16 @@ export const PluginsHub = () => {
                 <Mail className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white">Email Copilot (Gmail / SMTP)</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white">Email Copilot (Gmail / SMTP)</h3>
+                  <button
+                    type="button"
+                    onClick={() => { setGuideTab('gmail'); setShowGuideModal(true); }}
+                    className="text-[10px] text-rose-400 hover:underline flex items-center gap-0.5"
+                  >
+                    Setup Guide <ExternalLink className="w-2.5 h-2.5" />
+                  </button>
+                </div>
                 <p className="text-[11px] text-slate-400">Autonomous email drafting with explicit authorization</p>
               </div>
             </div>
@@ -274,7 +299,16 @@ export const PluginsHub = () => {
                 <MessageSquare className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white">WhatsApp Agent (Baileys Bridge)</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white">WhatsApp Agent (Baileys Bridge)</h3>
+                  <button
+                    type="button"
+                    onClick={() => { setGuideTab('whatsapp'); setShowGuideModal(true); }}
+                    className="text-[10px] text-emerald-400 hover:underline flex items-center gap-0.5"
+                  >
+                    QR Link Guide <ExternalLink className="w-2.5 h-2.5" />
+                  </button>
+                </div>
                 <p className="text-[11px] text-slate-400">Direct instant messaging & alerts</p>
               </div>
             </div>
@@ -435,6 +469,13 @@ export const PluginsHub = () => {
           </div>
         </div>
       </div>
+
+      {/* Integration Guide Modal */}
+      <IntegrationGuideModal
+        isOpen={showGuideModal}
+        onClose={() => setShowGuideModal(false)}
+        initialService={guideTab}
+      />
     </div>
   );
 };

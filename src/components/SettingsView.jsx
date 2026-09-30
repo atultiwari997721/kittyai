@@ -18,6 +18,8 @@ import {
   Zap
 } from 'lucide-react';
 import { kritiService } from '../services/kritiService';
+import { PairingModal } from './PairingModal';
+import { IntegrationGuideModal } from './IntegrationGuideModal';
 
 export const SettingsView = () => {
   const [settings, setSettings] = useState(kritiService.getSettings());
@@ -26,9 +28,13 @@ export const SettingsView = () => {
   const [sidecarStatus, setSidecarStatus] = useState(null);
   const [keyTesting, setKeyTesting] = useState({});
   const [keyResults, setKeyResults] = useState({});
+  const [showPairModal, setShowPairModal] = useState(false);
+  const [showGuideModal, setShowGuideModal] = useState(false);
+  const [pairingState, setPairingState] = useState(kritiService.getPairingState());
 
   useEffect(() => {
     checkSidecar();
+    setPairingState(kritiService.getPairingState());
     // Prefill from environment or defaults if missing in local state
     setSettings(prev => ({
       ...prev,
@@ -45,6 +51,27 @@ export const SettingsView = () => {
     const online = await kritiService.checkSidecarHealth();
     setSidecarStatus(online ? 'online' : 'offline');
     setIsTestingSidecar(false);
+  };
+
+  const handleKeyChange = (field, value) => {
+    setSettings(prev => {
+      const next = { ...prev, [field]: value };
+      if (field === 'groqApiKey' && value.trim()) {
+        next.activeModel = 'groq-llama3';
+      }
+      return next;
+    });
+    // Immediately persist to browser storage so user never loses key!
+    kritiService.saveSettings({ [field]: value });
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 2000);
+  };
+
+  const handleSelectModel = (modelId) => {
+    setSettings(prev => ({ ...prev, activeModel: modelId }));
+    kritiService.saveSettings({ activeModel: modelId });
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 2000);
   };
 
   const handleSave = (e) => {
@@ -137,7 +164,7 @@ export const SettingsView = () => {
               return (
                 <div
                   key={m.id}
-                  onClick={() => setSettings(prev => ({ ...prev, activeModel: m.id }))}
+                  onClick={() => handleSelectModel(m.id)}
                   className={`p-4 rounded-2xl border cursor-pointer transition-all ${
                     isSelected
                       ? 'bg-fuchsia-600/15 border-fuchsia-500/60 shadow-lg shadow-fuchsia-500/10'
@@ -164,12 +191,17 @@ export const SettingsView = () => {
 
         {/* API Keys Configuration with Live Test Verification */}
         <div className="glass-panel p-6 rounded-3xl border border-white/5 space-y-4">
-          <h2 className="text-sm font-bold text-white flex items-center gap-2">
-            <Key className="w-4 h-4 text-indigo-400" />
-            <span>AI Provider API Keys (Stored Safely in Local Storage Vault)</span>
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+              <Key className="w-4 h-4 text-indigo-400" />
+              <span>AI Provider API Keys (Stored Safely in Local Storage Vault)</span>
+            </h2>
+            <span className="text-[10px] px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-medium">
+              ✓ Auto-saved to Browser Storage
+            </span>
+          </div>
           <p className="text-xs text-slate-400">
-            Your keys remain strictly on your client device or local sidecar. They are never sent to unverified servers.
+            Keys are immediately written to browser localStorage and local sidecar. They will never disappear when switching tabs.
           </p>
 
           <div className="space-y-4 text-xs">
@@ -203,7 +235,7 @@ export const SettingsView = () => {
                 type="password"
                 placeholder="gsk_..."
                 value={settings.groqApiKey}
-                onChange={(e) => setSettings(prev => ({ ...prev, groqApiKey: e.target.value }))}
+                onChange={(e) => handleKeyChange('groqApiKey', e.target.value)}
                 className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono"
               />
               {keyResults.groq && (
@@ -246,7 +278,7 @@ export const SettingsView = () => {
                 type="password"
                 placeholder="AIzaSy..."
                 value={settings.geminiApiKey}
-                onChange={(e) => setSettings(prev => ({ ...prev, geminiApiKey: e.target.value }))}
+                onChange={(e) => handleKeyChange('geminiApiKey', e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono"
               />
               {keyResults.gemini && (
@@ -289,7 +321,7 @@ export const SettingsView = () => {
                 type="password"
                 placeholder="sk-..."
                 value={settings.openaiApiKey}
-                onChange={(e) => setSettings(prev => ({ ...prev, openaiApiKey: e.target.value }))}
+                onChange={(e) => handleKeyChange('openaiApiKey', e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono"
               />
               {keyResults.openai && (
@@ -332,7 +364,7 @@ export const SettingsView = () => {
                 type="password"
                 placeholder="nvapi-..."
                 value={settings.nvidiaApiKey}
-                onChange={(e) => setSettings(prev => ({ ...prev, nvidiaApiKey: e.target.value }))}
+                onChange={(e) => handleKeyChange('nvidiaApiKey', e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono"
               />
               {keyResults.nvidia && (
@@ -450,7 +482,79 @@ export const SettingsView = () => {
             </div>
           </div>
         </div>
+
+        {/* 6-Digit Bilateral Pairing Card */}
+        <div className="glass-panel p-6 rounded-3xl border border-white/5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-2xl bg-fuchsia-600/20 text-fuchsia-400 flex items-center justify-center border border-fuchsia-500/30">
+                <Radio className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                  <span>Web & Desktop Bilateral Pairing (6-Digit Code)</span>
+                  {pairingState.paired && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      Linked: {pairingState.code}
+                    </span>
+                  )}
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Connect your deployed Website to your Windows Desktop Kernel using a secure 6-digit code.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowPairModal(true)}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white font-medium text-xs flex items-center gap-2 shadow-lg shadow-fuchsia-500/20 transition"
+            >
+              <Radio className="w-3.5 h-3.5" />
+              <span>{pairingState.paired ? 'Manage Pairing' : 'Pair Desktop App'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Service Integration Guides Card */}
+        <div className="glass-panel p-6 rounded-3xl border border-white/5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
+                <Layers className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-white">How To Integrate Gmail, WhatsApp & Services</h2>
+                <p className="text-xs text-slate-400">
+                  Step-by-step walkthroughs for Gmail App Passwords, WhatsApp QR Bridge, Google Calendar, and VS Code.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowGuideModal(true)}
+              className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-white font-medium text-xs flex items-center gap-2 transition"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Open Setup Guides</span>
+            </button>
+          </div>
+        </div>
       </form>
+
+      {/* Pairing Modal */}
+      <PairingModal
+        isOpen={showPairModal}
+        onClose={() => setShowPairModal(false)}
+        onPairingChanged={setPairingState}
+      />
+
+      {/* Integration Guide Modal */}
+      <IntegrationGuideModal
+        isOpen={showGuideModal}
+        onClose={() => setShowGuideModal(false)}
+      />
     </div>
   );
 };

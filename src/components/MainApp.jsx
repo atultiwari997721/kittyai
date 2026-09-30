@@ -15,7 +15,9 @@ import {
   Sliders, 
   Zap,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Terminal,
+  Radio
 } from 'lucide-react';
 import { ChatCopilot } from './ChatCopilot';
 import { TaskCenter } from './TaskCenter';
@@ -24,17 +26,22 @@ import { PluginsHub } from './PluginsHub';
 import { MemoryVaultView } from './MemoryVaultView';
 import { SettingsView } from './SettingsView';
 import { DownloadView } from './DownloadView';
+import { TerminalWorkspace } from './TerminalWorkspace';
+import { PairingModal } from './PairingModal';
 import { kritiService } from '../services/kritiService';
 
 export const MainApp = () => {
-  const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'tasks' | 'controls' | 'plugins' | 'memory' | 'settings' | 'downloads'
+  const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'terminal' | 'tasks' | 'controls' | 'plugins' | 'memory' | 'settings' | 'downloads'
   const [sidecarOnline, setSidecarOnline] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [currentModel, setCurrentModel] = useState(kritiService.resolveActiveModel());
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+  const [showPairModal, setShowPairModal] = useState(false);
+  const [pairingState, setPairingState] = useState(kritiService.getPairingState());
 
   useEffect(() => {
     setCurrentModel(kritiService.resolveActiveModel());
+    setPairingState(kritiService.getPairingState());
 
     const check = async () => {
       const online = await kritiService.checkSidecarHealth();
@@ -57,6 +64,7 @@ export const MainApp = () => {
 
   const navItems = [
     { id: 'chat', label: 'Chat Copilot', icon: MessageSquare, badge: 'Live AI' },
+    { id: 'terminal', label: 'Terminal & Code', icon: Terminal, badge: 'PowerOS' },
     { id: 'tasks', label: 'Task Center', icon: Clock, badge: pendingApprovalsCount > 0 ? `${pendingApprovalsCount} Action` : 'Ready', urgent: pendingApprovalsCount > 0 },
     { id: 'controls', label: 'Desktop Controls', icon: Monitor, badge: 'Full OS' },
     { id: 'plugins', label: 'Plugins & Mail', icon: Layers, badge: 'Tools' },
@@ -205,6 +213,21 @@ export const MainApp = () => {
 
             </div>
 
+            {/* 6-Digit Alphanumeric Bilateral Pairing Button */}
+            <button
+              onClick={() => setShowPairModal(true)}
+              className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition ${
+                pairingState.paired
+                  ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                  : 'bg-fuchsia-950/60 border-fuchsia-500/30 text-fuchsia-300 hover:bg-fuchsia-900/50'
+              }`}
+            >
+              <Radio className="w-3.5 h-3.5 animate-pulse" />
+              <span className="hidden sm:inline">
+                {pairingState.paired ? `Linked: ${pairingState.code}` : 'Pair Desktop (6-Digit)'}
+              </span>
+            </button>
+
             <button
               onClick={() => setActiveTab('downloads')}
               className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white font-medium text-xs flex items-center gap-1.5 shadow-md shadow-fuchsia-500/20 transition flex-shrink-0"
@@ -224,6 +247,9 @@ export const MainApp = () => {
               onNavigateToControls={() => setActiveTab('controls')}
             />
           )}
+          {activeTab === 'terminal' && (
+            <TerminalWorkspace onOpenPairing={() => setShowPairModal(true)} />
+          )}
           {activeTab === 'tasks' && <TaskCenter />}
           {activeTab === 'controls' && <DesktopControls />}
           {activeTab === 'plugins' && <PluginsHub />}
@@ -236,9 +262,9 @@ export const MainApp = () => {
         <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#0d121f]/95 backdrop-blur-lg border-t border-white/10 flex lg:hidden items-center justify-around py-2 px-1">
           {[
             { id: 'chat', label: 'Chat', icon: MessageSquare },
+            { id: 'terminal', label: 'Terminal', icon: Terminal },
             { id: 'tasks', label: 'Tasks', icon: Clock, badge: pendingApprovalsCount },
             { id: 'controls', label: 'Controls', icon: Monitor },
-            { id: 'memory', label: 'Memory', icon: BrainCircuit },
             { id: 'settings', label: 'Settings', icon: Settings },
           ].map((item) => {
             const active = activeTab === item.id;
@@ -265,6 +291,13 @@ export const MainApp = () => {
           })}
         </nav>
       </main>
+
+      {/* 6-Digit Alphanumeric Bilateral Pairing Modal */}
+      <PairingModal
+        isOpen={showPairModal}
+        onClose={() => setShowPairModal(false)}
+        onPairingChanged={setPairingState}
+      />
     </div>
   );
 };

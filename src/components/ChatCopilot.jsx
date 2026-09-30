@@ -67,9 +67,16 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
   }, [messages, activeClarification, isLoading]);
 
   useEffect(() => {
-    // Keep active model up-to-date
+    // Keep active model and key up-to-date
     setActiveModel(kritiService.resolveActiveModel());
+    setGroqKeyInput(kritiService.getApiKey('groq') || '');
   }, []);
+
+  useEffect(() => {
+    if (showKeyModal) {
+      setGroqKeyInput(kritiService.getApiKey('groq') || '');
+    }
+  }, [showKeyModal]);
 
   const toggleLog = (msgId) => {
     setExpandedLogs(prev => ({ ...prev, [msgId]: !prev[msgId] }));
@@ -86,12 +93,19 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
     kritiService.saveSettings({ activeModel: model });
   };
 
+  const handleGroqInputChange = (val) => {
+    setGroqKeyInput(val);
+    // Immediately persist to browser storage so it is never lost on navigation
+    kritiService.saveSettings({ groqApiKey: val, activeModel: 'groq-llama3' });
+    setActiveModel('groq-llama3');
+  };
+
   const handleSaveGroqKey = async (e) => {
     e.preventDefault();
     if (!groqKeyInput.trim()) return;
     kritiService.saveSettings({ groqApiKey: groqKeyInput.trim(), activeModel: 'groq-llama3' });
     setActiveModel('groq-llama3');
-    setKeySaveMessage({ type: 'success', text: 'Groq API Key Saved! Testing key...' });
+    setKeySaveMessage({ type: 'success', text: 'Groq API Key Saved in Browser Storage! Testing key...' });
     
     const testResult = await kritiService.testProviderKey('groq', groqKeyInput.trim());
     if (testResult.success) {
@@ -284,11 +298,11 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
   ];
 
   const quickPrompts = [
-    "⚡ Fix the login error in my VS Code project",
+    "⚡ Run command dir",
+    "📁 Create file workspace/hello.py with print('Hello from KritiAI Kernel!')",
     "📅 Schedule a meeting with the project team tomorrow at 5 PM",
     "✉️ Write an email to Rahul saying I will send deliverables tomorrow",
-    "🖥️ Switch Windows to dark mode and set volume to 60%",
-    "🧠 Remember that my Project Team means Rahul, Priya and Ankit"
+    "🖥️ Switch Windows to dark mode and set volume to 60%"
   ];
 
   // Helper to render text with markdown bold, italic, and code blocks
@@ -463,7 +477,7 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
               type="password"
               placeholder="gsk_..."
               value={groqKeyInput}
-              onChange={(e) => setGroqKeyInput(e.target.value)}
+              onChange={(e) => handleGroqInputChange(e.target.value)}
               className="flex-1 bg-black/50 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-fuchsia-500"
             />
             <button

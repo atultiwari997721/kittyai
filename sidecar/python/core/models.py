@@ -146,4 +146,33 @@ class ClarificationRequest(BaseModel):
     taskId: str
     response: str
 
+class TerminalRunRequest(BaseModel):
+    command: str
+    cwd: Optional[str] = None
+    timeout: Optional[int] = 30
+
+class FileCreateRequest(BaseModel):
+    path: str
+    content: str
+    overwrite: Optional[bool] = True
+
+class FolderCreateRequest(BaseModel):
+    path: str
+
+class CodeRunRequest(BaseModel):
+    code: str
+    language: Optional[str] = "python"
+    filename: Optional[str] = None
+    cwd: Optional[str] = None
+
+class PairGenerateRequest(BaseModel):
+    clientType: Optional[str] = "web"
+    deviceName: Optional[str] = None
+
+class PairVerifyRequest(BaseModel):
+    code: str
+    clientType: Optional[str] = "desktop"
+    deviceName: Optional[str] = None
+
+
 

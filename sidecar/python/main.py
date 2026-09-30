@@ -28,7 +28,14 @@ from sidecar.python.core.models import (
     MemorySaveRequest,
     ChatRequest,
     ClarificationRequest,
+    TerminalRunRequest,
+    FileCreateRequest,
+    FolderCreateRequest,
+    CodeRunRequest,
+    PairGenerateRequest,
+    PairVerifyRequest,
 )
+from sidecar.python.core.terminal_fs import terminal_fs_engine
 from sidecar.python.core.llm_orchestrator import orchestrator
 from sidecar.python.core.router import master_router
 from sidecar.python.core.screen import screen_manager
@@ -359,6 +366,78 @@ async def save_memory(req: MemorySaveRequest):
 async def delete_memory(key: str):
     success = personal_memory.delete_memory(key)
     return {"success": success}
+
+# --- Superpower Terminal Execution Endpoints ---
+@app.post("/api/terminal/run")
+async def run_terminal(req: TerminalRunRequest):
+    """Executes a real shell command in Windows PowerShell or CMD and returns stdout/stderr."""
+    return terminal_fs_engine.run_terminal_command(
+        command=req.command,
+        cwd=req.cwd,
+        timeout=req.timeout or 30
+    )
+
+# --- Superpower File & Folder Endpoints ---
+@app.post("/api/fs/create-file")
+async def create_file(req: FileCreateRequest):
+    """Creates/writes a file with content on the user's disk."""
+    return terminal_fs_engine.create_file(
+        path=req.path,
+        content=req.content,
+        overwrite=req.overwrite if req.overwrite is not None else True
+    )
+
+@app.post("/api/fs/create-folder")
+async def create_folder(req: FolderCreateRequest):
+    """Creates a folder/directory on the user's disk."""
+    return terminal_fs_engine.create_folder(path=req.path)
+
+@app.get("/api/fs/list")
+async def list_files(path: str = None):
+    """Lists files and folders in the specified path."""
+    return terminal_fs_engine.list_files(path=path)
+
+@app.post("/api/fs/read")
+async def read_file(path: str):
+    """Reads file text from disk."""
+    return terminal_fs_engine.read_file(path=path)
+
+@app.post("/api/fs/run-code")
+async def run_code(req: CodeRunRequest):
+    """Writes code to workspace file and executes it via Python/Node/PowerShell."""
+    return terminal_fs_engine.run_code_snippet(
+        code=req.code,
+        language=req.language or "python",
+        filename=req.filename,
+        cwd=req.cwd
+    )
+
+# --- 6-Digit Alphanumeric Pairing Endpoints (Website <-> Desktop App) ---
+@app.post("/api/pair/generate")
+async def generate_pairing_code(req: PairGenerateRequest = None):
+    """Generates a 6-digit alphanumeric pairing code to connect Website and Desktop App."""
+    client_type = req.clientType if req else "web"
+    device_name = req.deviceName if req else None
+    return terminal_fs_engine.generate_pair_code(client_type=client_type, device_name=device_name)
+
+@app.post("/api/pair/verify")
+async def verify_pairing_code(req: PairVerifyRequest):
+    """Verifies a 6-digit alphanumeric pairing code and establishes bilateral link."""
+    return terminal_fs_engine.verify_pair_code(
+        code=req.code,
+        client_type=req.clientType or "desktop",
+        device_name=req.deviceName
+    )
+
+@app.get("/api/pair/status")
+async def get_pair_status():
+    """Returns the current link state between Web and Desktop App."""
+    return terminal_fs_engine.get_pairing_status()
+
+@app.post("/api/pair/unpair")
+async def unpair_devices():
+    """Unpairs connected devices."""
+    return terminal_fs_engine.unpair_device()
 
 if __name__ == "__main__":
     import uvicorn
