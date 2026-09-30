@@ -51,10 +51,79 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
   const [copiedLink, setCopiedLink] = useState(null);
   const [expandedLogs, setExpandedLogs] = useState({});
 
-  // Quick Key Configuration Drawer
+  // Dynamic model key metadata helper
+  const getModelKeyInfo = (modelId) => {
+    switch (modelId) {
+      case 'groq-llama3':
+        return {
+          provider: 'groq',
+          name: 'Groq',
+          fullName: 'Groq LPUs (Llama 3.3 70B)',
+          keyField: 'groqApiKey',
+          hasKey: !!kritiService.getApiKey('groq'),
+          url: 'https://console.groq.com/keys',
+          placeholder: 'gsk_...'
+        };
+      case 'gemini-2.0':
+        return {
+          provider: 'gemini',
+          name: 'Gemini',
+          fullName: 'Google Gemini 2.0 Flash',
+          keyField: 'geminiApiKey',
+          hasKey: !!kritiService.getApiKey('gemini'),
+          url: 'https://aistudio.google.com',
+          placeholder: 'AIzaSy...'
+        };
+      case 'gpt-4o':
+        return {
+          provider: 'openai',
+          name: 'OpenAI',
+          fullName: 'OpenAI GPT-4o',
+          keyField: 'openaiApiKey',
+          hasKey: !!kritiService.getApiKey('openai'),
+          url: 'https://platform.openai.com/api-keys',
+          placeholder: 'sk-...'
+        };
+      case 'nvidia-nim':
+        return {
+          provider: 'nvidia',
+          name: 'NVIDIA NIM',
+          fullName: 'NVIDIA NIM (Llama 3.1 70B)',
+          keyField: 'nvidiaApiKey',
+          hasKey: !!kritiService.getApiKey('nvidia'),
+          url: 'https://build.nvidia.com',
+          placeholder: 'nvapi-...'
+        };
+      case 'ollama':
+        return {
+          provider: 'ollama',
+          name: 'Local Ollama',
+          fullName: 'Local Ollama (Offline)',
+          keyField: null,
+          hasKey: true,
+          url: null,
+          placeholder: null
+        };
+      default:
+        return {
+          provider: 'groq',
+          name: 'Groq',
+          fullName: 'Groq LPUs',
+          keyField: 'groqApiKey',
+          hasKey: !!kritiService.getApiKey('groq'),
+          url: 'https://console.groq.com/keys',
+          placeholder: 'gsk_...'
+        };
+    }
+  };
+
+  // Quick Key Configuration Drawer state
   const [showKeyModal, setShowKeyModal] = useState(false);
-  const [groqKeyInput, setGroqKeyInput] = useState(kritiService.getApiKey('groq') || '');
+  const [modelKeyInput, setModelKeyInput] = useState('');
   const [keySaveMessage, setKeySaveMessage] = useState(null);
+
+  const currentKeyInfo = getModelKeyInfo(activeModel);
+  const isKeyMissingForSelectedModel = !currentKeyInfo.hasKey;
 
   const messagesEndRef = useRef(null);
 
@@ -67,16 +136,15 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
   }, [messages, activeClarification, isLoading]);
 
   useEffect(() => {
-    // Keep active model and key up-to-date
+    // Keep active model up-to-date
     setActiveModel(kritiService.resolveActiveModel());
-    setGroqKeyInput(kritiService.getApiKey('groq') || '');
   }, []);
 
   useEffect(() => {
-    if (showKeyModal) {
-      setGroqKeyInput(kritiService.getApiKey('groq') || '');
+    if (showKeyModal && currentKeyInfo.provider) {
+      setModelKeyInput(kritiService.getApiKey(currentKeyInfo.provider) || '');
     }
-  }, [showKeyModal]);
+  }, [showKeyModal, activeModel]);
 
   const toggleLog = (msgId) => {
     setExpandedLogs(prev => ({ ...prev, [msgId]: !prev[msgId] }));
@@ -91,31 +159,44 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
   const handleModelChange = (model) => {
     setActiveModel(model);
     kritiService.saveSettings({ activeModel: model });
+    const info = getModelKeyInfo(model);
+    // If the selected model is missing its key, open the config drawer to prompt user.
+    // If the selected model already has a key, keep drawer closed and do not ask!
+    if (!info.hasKey) {
+      setShowKeyModal(true);
+      setModelKeyInput('');
+    } else {
+      setShowKeyModal(false);
+    }
   };
 
-  const handleGroqInputChange = (val) => {
-    setGroqKeyInput(val);
-    // Immediately persist to browser storage so it is never lost on navigation
-    kritiService.saveSettings({ groqApiKey: val, activeModel: 'groq-llama3' });
-    setActiveModel('groq-llama3');
+  const handleKeyInputChange = (val) => {
+    setModelKeyInput(val);
+    if (currentKeyInfo.keyField) {
+      // Immediately persist to browser storage so it is never lost on navigation
+      kritiService.saveSettings({ [currentKeyInfo.keyField]: val.trim(), activeModel });
+    }
   };
 
-  const handleSaveGroqKey = async (e) => {
-    e.preventDefault();
-    if (!groqKeyInput.trim()) return;
-    kritiService.saveSettings({ groqApiKey: groqKeyInput.trim(), activeModel: 'groq-llama3' });
-    setActiveModel('groq-llama3');
-    setKeySaveMessage({ type: 'success', text: 'Groq API Key Saved in Browser Storage! Testing key...' });
+  const handleSaveModelKey = async (e) => {
+    if (e) e.preventDefault();
+    if (!modelKeyInput.trim() || !currentKeyInfo.provider) return;
+
+    const trimmed = modelKeyInput.trim();
+    if (currentKeyInfo.keyField) {
+      kritiService.saveSettings({ [currentKeyInfo.keyField]: trimmed, activeModel });
+    }
+    setKeySaveMessage({ type: 'success', text: `Saving & verifying ${currentKeyInfo.name} API Key...` });
     
-    const testResult = await kritiService.testProviderKey('groq', groqKeyInput.trim());
+    const testResult = await kritiService.testProviderKey(currentKeyInfo.provider, trimmed);
     if (testResult.success) {
-      setKeySaveMessage({ type: 'success', text: 'Groq API Key Verified! Llama 3.3 70B Active.' });
+      setKeySaveMessage({ type: 'success', text: `${currentKeyInfo.name} key verified! Inference is active.` });
       setTimeout(() => {
         setShowKeyModal(false);
         setKeySaveMessage(null);
-      }, 1500);
+      }, 1400);
     } else {
-      setKeySaveMessage({ type: 'error', text: testResult.message });
+      setKeySaveMessage({ type: 'error', text: testResult.message || 'Key verification failed.' });
     }
   };
 
@@ -427,19 +508,17 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
             </select>
           </div>
 
-          {/* Quick API Key Button */}
-          <button
-            onClick={() => setShowKeyModal(!showKeyModal)}
-            className={`px-2.5 py-1 rounded-xl text-xs font-medium flex items-center gap-1 border transition ${
-              hasGroqKey 
-                ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
-                : 'bg-amber-950/60 border-amber-500/40 text-amber-300 hover:bg-amber-900/60'
-            }`}
-            title="Configure API Keys"
-          >
-            <Key className="w-3.5 h-3.5" />
-            <span>{hasGroqKey ? 'Groq Active' : 'Enter Groq Key'}</span>
-          </button>
+          {/* ONLY show API Key prompt button if the user selected a model whose API key is MISSING! If key is present, don't ask anything! */}
+          {isKeyMissingForSelectedModel && (
+            <button
+              onClick={() => setShowKeyModal(!showKeyModal)}
+              className="px-2.5 py-1 rounded-xl text-xs font-medium flex items-center gap-1.5 border bg-amber-950/70 border-amber-500/50 text-amber-300 hover:bg-amber-900/70 transition shadow-sm animate-pulse"
+              title={`Configure ${currentKeyInfo.name} API Key`}
+            >
+              <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+              <span>Enter {currentKeyInfo.name} Key</span>
+            </button>
+          )}
 
           <button
             onClick={clearChat}
@@ -451,13 +530,13 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
         </div>
       </div>
 
-      {/* Quick API Key Drawer */}
-      {showKeyModal && (
-        <form onSubmit={handleSaveGroqKey} className="glass-panel p-4 rounded-2xl border border-fuchsia-500/30 mb-3 space-y-2 shadow-xl animate-in">
+      {/* Quick API Key Drawer - ONLY shown when triggered for a model missing its key */}
+      {showKeyModal && isKeyMissingForSelectedModel && (
+        <form onSubmit={handleSaveModelKey} className="glass-panel p-4 rounded-2xl border border-amber-500/40 mb-3 space-y-2 shadow-xl animate-in">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-bold text-white">
-              <Key className="w-4 h-4 text-fuchsia-400" />
-              <span>Configure Groq LPU API Key (Instant Sub-Second AI)</span>
+              <Key className="w-4 h-4 text-amber-400" />
+              <span>Configure {currentKeyInfo.fullName} API Key</span>
             </div>
             <button
               type="button"
@@ -469,23 +548,39 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
           </div>
 
           <p className="text-[11px] text-slate-400">
-            Paste your Groq API key below to activate ultra-fast Llama 3.3 70B inference:
+            You selected <strong>{currentKeyInfo.fullName}</strong>. Enter your API key below to activate inference:
           </p>
 
           <div className="flex gap-2">
             <input
               type="password"
-              placeholder="gsk_..."
-              value={groqKeyInput}
-              onChange={(e) => handleGroqInputChange(e.target.value)}
-              className="flex-1 bg-black/50 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-fuchsia-500"
+              placeholder={currentKeyInfo.placeholder || 'Enter API Key...'}
+              value={modelKeyInput}
+              onChange={(e) => handleKeyInputChange(e.target.value)}
+              className="flex-1 bg-black/50 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-amber-500"
             />
             <button
               type="submit"
-              className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 text-white font-medium text-xs shadow"
+              className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-indigo-600 hover:from-amber-500 text-white font-medium text-xs shadow"
             >
-              Save & Test
+              Save & Verify
             </button>
+          </div>
+
+          <div className="flex items-center justify-between pt-1 text-[11px]">
+            {currentKeyInfo.url && (
+              <a
+                href={currentKeyInfo.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-amber-400 hover:underline flex items-center gap-1"
+              >
+                Get free {currentKeyInfo.name} API Key <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+            <span className="text-slate-500 text-[10px]">
+              Keys auto-save to browser storage
+            </span>
           </div>
 
           {keySaveMessage && (

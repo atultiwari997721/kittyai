@@ -15,7 +15,8 @@ import {
   Sparkles,
   AlertCircle,
   CheckCircle2,
-  Zap
+  Zap,
+  Layers
 } from 'lucide-react';
 import { kritiService } from '../services/kritiService';
 import { PairingModal } from './PairingModal';
