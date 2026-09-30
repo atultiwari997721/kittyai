@@ -20,7 +20,7 @@ const AppContent = () => {
   const shouldHideNavbar = hideNavbarRoutes.includes(location.pathname);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-screen bg-[#0a0d14] text-slate-100 selection:bg-fuchsia-500 selection:text-white font-sans antialiased">
       {!shouldHideNavbar && <Navbar />}
       <Routes>
         <Route path="/" element={<Hero />} />

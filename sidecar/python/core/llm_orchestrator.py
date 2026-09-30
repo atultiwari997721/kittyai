@@ -103,6 +103,24 @@ class LLMOrchestrator:
             description="Lightweight and efficient model"
         ))
 
+        # NVIDIA NIM Cloud APIs
+        models.append(ModelInfoModel(
+            id="nvidia:meta/llama-3.3-70b-instruct",
+            name="Nvidia NIM - Llama 3.3 70B",
+            provider="nvidia",
+            isLocal=False,
+            supportsVision=False,
+            description="Accelerated inference via Nvidia NIM API"
+        ))
+        models.append(ModelInfoModel(
+            id="nvidia:deepseek-ai/deepseek-r1",
+            name="Nvidia NIM - DeepSeek R1",
+            provider="nvidia",
+            isLocal=False,
+            supportsVision=False,
+            description="Frontier reasoning running on Nvidia cloud infrastructure"
+        ))
+
         self._cached_models = models
         return models
 
@@ -140,15 +158,17 @@ class LLMOrchestrator:
         # Determine provider sequence
         providers_to_try = []
         if self.active_provider == "ollama":
-            providers_to_try = ["ollama", "gemini", "groq", "openai"]
+            providers_to_try = ["ollama", "nvidia", "gemini", "groq", "openai"]
+        elif self.active_provider == "nvidia":
+            providers_to_try = ["nvidia", "ollama", "gemini", "groq", "openai"]
         elif self.active_provider == "gemini":
-            providers_to_try = ["gemini", "ollama", "groq", "openai"]
+            providers_to_try = ["gemini", "nvidia", "ollama", "groq", "openai"]
         elif self.active_provider == "groq":
-            providers_to_try = ["groq", "gemini", "openai", "ollama"]
+            providers_to_try = ["groq", "nvidia", "gemini", "openai", "ollama"]
         elif self.active_provider == "openai":
-            providers_to_try = ["openai", "gemini", "groq", "ollama"]
+            providers_to_try = ["openai", "nvidia", "gemini", "groq", "ollama"]
         else:
-            providers_to_try = ["ollama", "gemini", "groq", "openai"]
+            providers_to_try = ["ollama", "nvidia", "gemini", "groq", "openai"]
 
         last_error = None
         for prov in providers_to_try:
@@ -158,6 +178,10 @@ class LLMOrchestrator:
                         res = await self._generate_ollama(prompt, system_prompt, image_base64, json_mode)
                         if res:
                             return res
+                elif prov == "nvidia" and settings.NVIDIA_API_KEY:
+                    res = await self._generate_nvidia(prompt, system_prompt, json_mode)
+                    if res:
+                        return res
                 elif prov == "gemini" and settings.GEMINI_API_KEY:
                     res = await self._generate_gemini(prompt, system_prompt, image_base64, json_mode)
                     if res:
@@ -237,6 +261,38 @@ class LLMOrchestrator:
 
         response = await model.generate_content_async(contents)
         return response.text
+
+    async def _generate_nvidia(
+        self,
+        prompt: str,
+        system_prompt: Optional[str],
+        json_mode: bool
+    ) -> Optional[str]:
+        model_name = self.active_model_id.replace("nvidia:", "") if self.active_model_id.startswith("nvidia:") else "meta/llama-3.3-70b-instruct"
+        async with httpx.AsyncClient(timeout=35.0) as client:
+            headers = {
+                "Authorization": f"Bearer {settings.NVIDIA_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+
+            payload = {
+                "model": model_name,
+                "messages": messages,
+                "temperature": 0.2,
+                "max_tokens": 2048
+            }
+            if json_mode:
+                payload["response_format"] = {"type": "json_object"}
+
+            res = await client.post("https://integrate.api.nvidia.com/v1/chat/completions", headers=headers, json=payload)
+            if res.status_code == 200:
+                data = res.json()
+                return data["choices"][0]["message"]["content"]
+        return None
 
     async def _generate_groq(
         self,
