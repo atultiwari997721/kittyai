@@ -14,7 +14,7 @@ import {
   RefreshCw,
   HelpCircle
 } from 'lucide-react';
-import { kittyService } from '../services/kittyService';
+import { kritiService } from '../services/kritiService';
 
 export const MemoryVaultView = () => {
   const [memories, setMemories] = useState([]);
@@ -25,7 +25,7 @@ export const MemoryVaultView = () => {
   const [newValue, setNewValue] = useState('');
 
   const loadMemories = () => {
-    setMemories(kittyService.getMemories());
+    setMemories(kritiService.getMemories());
   };
 
   useEffect(() => {
@@ -48,7 +48,7 @@ export const MemoryVaultView = () => {
       }
     }
 
-    kittyService.saveMemory(newKey.trim(), parsedVal, newCategory);
+    kritiService.saveMemory(newKey.trim(), parsedVal, newCategory);
     setNewKey('');
     setNewValue('');
     setIsAdding(false);
@@ -57,7 +57,7 @@ export const MemoryVaultView = () => {
 
   const handleDelete = (key) => {
     if (confirm(`Remove "${key}" from your persistent memory?`)) {
-      kittyService.deleteMemory(key);
+      kritiService.deleteMemory(key);
       loadMemories();
     }
   };
@@ -69,7 +69,7 @@ export const MemoryVaultView = () => {
   );
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20 lg:pb-6">
       {/* Header */}
       <div className="glass-panel p-6 rounded-3xl border border-white/5 shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -79,7 +79,7 @@ export const MemoryVaultView = () => {
           <div>
             <h1 className="text-xl font-extrabold text-white">Persistent Memory Vault</h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              Entities, contacts, and preferences KittyAI has learned through the clarification loop
+              Entities, contacts, and preferences KritiAI has learned through the clarification loop
             </p>
           </div>
         </div>
@@ -97,8 +97,8 @@ export const MemoryVaultView = () => {
       <div className="p-4 rounded-2xl bg-gradient-to-r from-fuchsia-950/40 via-indigo-950/40 to-cyan-950/40 border border-fuchsia-500/20 text-xs text-slate-300 flex items-start gap-3">
         <HelpCircle className="w-5 h-5 text-fuchsia-400 flex-shrink-0 mt-0.5" />
         <div>
-          <span className="font-bold text-white">How KittyAI Remembers: </span>
-          When you tell KittyAI in chat to do something for an undefined entity (like <em>"Schedule a meeting for the team"</em>), KittyAI asks you once who they are. Your reply is permanently committed here into the Memory Vault. In all future interactions, KittyAI resolves it automatically!
+          <span className="font-bold text-white">How KritiAI Remembers: </span>
+          When you tell KritiAI in chat to do something for an undefined entity (like <em>"Schedule a meeting for the team"</em>), KritiAI asks you once who they are. Your reply is permanently committed here into the Memory Vault. In all future interactions, KritiAI resolves it automatically!
         </div>
       </div>
 
@@ -112,13 +112,13 @@ export const MemoryVaultView = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div>
-              <label className="text-slate-400 block mb-1">Entity Key (e.g. "team", "client_acme", "manager")</label>
+              <label className="text-slate-400 block mb-1">Entity Key (e.g. "project team", "client_acme", "manager")</label>
               <input
                 type="text"
                 required
                 value={newKey}
                 onChange={(e) => setNewKey(e.target.value)}
-                placeholder="team"
+                placeholder="project team"
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2 text-slate-200 focus:outline-none focus:border-fuchsia-500"
               />
             </div>
@@ -134,6 +134,7 @@ export const MemoryVaultView = () => {
                 <option value="calendar">Calendar & Meeting Rules</option>
                 <option value="preference">Personal Preferences</option>
                 <option value="credentials">Service Credentials</option>
+                <option value="workspace">Workspace & Code Paths</option>
                 <option value="general">General</option>
               </select>
             </div>
@@ -148,7 +149,7 @@ export const MemoryVaultView = () => {
               required
               value={newValue}
               onChange={(e) => setNewValue(e.target.value)}
-              placeholder="alex@company.com, sarah@company.com, +1-555-0199"
+              placeholder="Rahul rahul@project.io, Priya priya@project.io, Ankit ankit@project.io"
               className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono"
             />
           </div>
@@ -220,7 +221,7 @@ export const MemoryVaultView = () => {
 
         {filtered.length === 0 && (
           <div className="col-span-full py-12 text-center text-slate-500 text-xs">
-            No memories match your query. Add one or ask KittyAI in chat!
+            No memories match your query. Add one or ask KritiAI in chat!
           </div>
         )}
       </div>

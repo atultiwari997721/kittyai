@@ -2,12 +2,13 @@
  * KritiAI - Autonomous Personal AI Operating System Service Layer
  * "Your Personal AI That Gets Things Done."
  * 
- * Supports:
+ * Capabilities:
  * - Master Analyzer with 12+ intent routes (OS_NAV, CODE_AGENT, MEETING_AGENT, EMAIL_AGENT, etc.)
- * - Multi-model AI: OpenAI, Gemini, NVIDIA NIM, Groq, Local Ollama
+ * - Multi-model AI: Google Gemini 2.0 Flash, OpenAI GPT-4o, NVIDIA NIM, Groq LPUs, Local Ollama
+ * - Live API testing & validation for all providers
  * - Personal Memory Vault & Clarification Loop
  * - Task Lifecycle & Consequential Approval Engine
- * - Local Python Sidecar integration (http://localhost:8000) & Native Browser Fallback
+ * - Local Python Sidecar integration (http://127.0.0.1:8000) & Native Browser Intelligence Fallback
  */
 
 const STORAGE_KEYS = {
@@ -117,6 +118,12 @@ class KritiService {
   deleteMemory(key) {
     const memories = this.getMemories().filter(m => m.key.toLowerCase() !== key.toLowerCase());
     localStorage.setItem(STORAGE_KEYS.MEMORIES, JSON.stringify(memories));
+
+    if (this.isSidecarOnline) {
+      fetch(`${this.sidecarUrl}/api/memory/${encodeURIComponent(key)}`, {
+        method: 'DELETE'
+      }).catch(() => {});
+    }
     return true;
   }
 
@@ -383,7 +390,7 @@ class KritiService {
     // 6. SCREEN ASSIST & DIAGNOSTICS
     if (lower.includes('screen') || lower.includes('screenshot') || lower.includes('look at') || lower.includes('analyze this')) {
       return {
-        reply: `👁️ **Screen Assist Analysis:**\n\n- **Active Target:** ${settings.assistTarget}\n- **Detected Windows:** Visual Studio Code — \`kritiai/src/App.jsx\`\n- **Diagnostics Context:** No unhandled fatal crashes in active terminal. Frontend is listening on \`http://localhost:5173\`.\n- **Recommendation:** All modules compiled successfully with exit code 0.`,
+        reply: `👁️ **Screen Assist Analysis:**\n\n- **Active Target:** ${settings.assistTarget}\n- **Detected Windows:** Visual Studio Code — \`kritiai/src/App.jsx\`\n- **Diagnostics Context:** No unhandled fatal crashes in active terminal. Frontend is listening on \`http://localhost:9972\`.\n- **Recommendation:** All modules compiled successfully with exit code 0.`,
         logs: [
           'Master Analyzer ➔ SCREEN_AGENT',
           'Screen capture: Targeted to ' + settings.assistTarget,
@@ -393,33 +400,94 @@ class KritiService {
       };
     }
 
-    // 7. DIRECT LLM PROVIDERS IF CONFIGURED
-    if (settings.nvidiaApiKey && model === 'nvidia-nim') {
-      try {
-        const res = await this.callNvidiaNim(text, settings.nvidiaApiKey);
-        if (res) return res;
-      } catch (e) {
-        console.warn('NVIDIA NIM error:', e);
+    // 7. DIRECT LLM PROVIDERS IF CONFIGURED (Real Calls)
+    const geminiKey = settings.geminiApiKey || (typeof import.meta !== 'undefined' ? import.meta.env?.VITE_GEMINI_API_KEY : '');
+    const nvidiaKey = settings.nvidiaApiKey || (typeof import.meta !== 'undefined' ? import.meta.env?.VITE_NVIDIA_API_KEY : '');
+    const openaiKey = settings.openaiApiKey || (typeof import.meta !== 'undefined' ? import.meta.env?.VITE_OPENAI_API_KEY : '');
+    const groqKey = settings.groqApiKey || (typeof import.meta !== 'undefined' ? import.meta.env?.VITE_GROQ_API_KEY : '');
+
+    if (model === 'gemini-2.0') {
+      if (geminiKey) {
+        try {
+          const res = await this.callGeminiApi(text, geminiKey);
+          if (res) return res;
+        } catch (e) {
+          console.warn('Gemini API call failed:', e);
+        }
+      } else {
+        return this.missingKeyResponse('Google Gemini 2.0 Flash', 'geminiApiKey', 'https://aistudio.google.com');
       }
     }
 
-    if (settings.geminiApiKey && model === 'gemini-2.0') {
+    if (model === 'nvidia-nim') {
+      if (nvidiaKey) {
+        try {
+          const res = await this.callNvidiaNim(text, nvidiaKey);
+          if (res) return res;
+        } catch (e) {
+          console.warn('NVIDIA NIM API call failed:', e);
+        }
+      } else {
+        return this.missingKeyResponse('NVIDIA NIM (Llama 3.1 70B)', 'nvidiaApiKey', 'https://build.nvidia.com');
+      }
+    }
+
+    if (model === 'gpt-4o') {
+      if (openaiKey) {
+        try {
+          const res = await this.callOpenAiApi(text, openaiKey);
+          if (res) return res;
+        } catch (e) {
+          console.warn('OpenAI API call failed:', e);
+        }
+      } else {
+        return this.missingKeyResponse('OpenAI GPT-4o', 'openaiApiKey', 'https://platform.openai.com/api-keys');
+      }
+    }
+
+    if (model === 'groq-llama3') {
+      if (groqKey) {
+        try {
+          const res = await this.callGroqApi(text, groqKey);
+          if (res) return res;
+        } catch (e) {
+          console.warn('Groq API call failed:', e);
+        }
+      } else {
+        return this.missingKeyResponse('Groq LPUs (Llama 3.3 70B)', 'groqApiKey', 'https://console.groq.com/keys');
+      }
+    }
+
+    if (model === 'ollama') {
       try {
-        const res = await this.callGeminiApi(text, settings.geminiApiKey);
+        const res = await this.callOllamaApi(text, settings.ollamaUrl, settings.ollamaModel);
         if (res) return res;
       } catch (e) {
-        console.warn('Gemini API error:', e);
+        console.warn('Ollama call failed:', e);
+        return {
+          reply: `⚠️ **Local Ollama Not Reachable at ${settings.ollamaUrl}**\n\nPlease ensure Ollama is installed and running (\`ollama run ${settings.ollamaModel}\`).\n\nYou can also switch to a cloud AI model in the top-right model selector or configure your API key in **Settings ➔ AI Providers**.`,
+          logs: ['Ollama connection refused', `URL: ${settings.ollamaUrl}`],
+          requiresClarification: false
+        };
       }
     }
 
     // Conversational Fallback
     return {
-      reply: `I am **KritiAI**, your autonomous personal AI operating system. I can organize your files, fix errors in VS Code, manage Gmail & Google Calendar after your authorization, analyze your screen in Assist Mode, and control Windows settings.\n\nTry giving me a personal command:\n- *"Fix the login error in my VS Code project"*\n- *"Write a reply to Rahul saying I will send the project tomorrow"*\n- *"Schedule a meeting with the project team tomorrow at 5 PM"*\n- *"Open Windows settings and help me change the theme"*\n- *"Remember that my Project Team means Rahul, Priya and Ankit"*`,
+      reply: `I am **KritiAI**, your autonomous personal AI operating system.\n\nI can execute real tasks on your Windows machine, inspect VS Code workspaces, manage Gmail & Google Calendar after your authorization, analyze your screen in Assist Mode, and control Windows settings.\n\nTry giving me a personal command:\n- *"Fix the login error in my VS Code project"*\n- *"Write a reply to Rahul saying I will send the project tomorrow"*\n- *"Schedule a meeting with the project team tomorrow at 5 PM"*\n- *"Open Windows settings and help me change the theme"*\n- *"Remember that my Project Team means Rahul, Priya and Ankit"*`,
       logs: [
         'Master Analyzer ➔ GENERAL_AGENT',
         'Model: ' + model,
         'Confidence: 0.98'
       ],
+      requiresClarification: false
+    };
+  }
+
+  missingKeyResponse(providerName, keyField, keyUrl) {
+    return {
+      reply: `🔑 **API Key Configuration Required for ${providerName}**\n\nTo enable live generation with **${providerName}**, please enter your API key in **Settings ➔ AI Models / System Settings**.\n\n- [Get your ${providerName} API Key](${keyUrl})\n\n💡 **Tip:** You can also:\n1. Switch to **Local Ollama** in the top model dropdown for 100% free offline inference.\n2. Or try any of KritiAI's autonomous operating commands (*"Fix VS Code error"*, *"Schedule meeting with team"*, *"Change Windows theme to dark"*), which execute locally without needing a cloud key!`,
+      logs: [`Provider: ${providerName}`, `Key required: ${keyField}`, 'Status: AWAITING_KEY'],
       requiresClarification: false
     };
   }
@@ -433,6 +501,18 @@ class KritiService {
     };
     this.saveMemory(entity, value, 'contacts');
 
+    if (this.isSidecarOnline && details.taskId) {
+      try {
+        await fetch(`${this.sidecarUrl}/api/chat/clarify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskId: details.taskId, response: answer })
+        });
+      } catch (err) {
+        console.warn('Sidecar clarify error:', err);
+      }
+    }
+
     return {
       reply: `🎉 **Memorized!** I have recorded **"${entity}"** permanently in your Memory Vault.\n\nNow resuming your request: Event has been prepared with ${value.contacts.join(', ')}. Check the **Task Center** for confirmation.`,
       entityLearned: entity,
@@ -440,6 +520,24 @@ class KritiService {
       logs: ['Clarification received', `Stored "${entity}" in vault`, 'Resumed task'],
       requiresClarification: false
     };
+  }
+
+  async callGeminiApi(prompt, apiKey) {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        reply: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
+        logs: ['Model: Google Gemini 2.0 Flash', 'Inference: Cloud (Google DeepMind)'],
+        requiresClarification: false
+      };
+    }
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error?.message || `HTTP ${res.status}`);
   }
 
   async callNvidiaNim(prompt, apiKey) {
@@ -459,28 +557,125 @@ class KritiService {
       const data = await res.json();
       return {
         reply: data.choices?.[0]?.message?.content || '',
-        logs: ['Model: NVIDIA NIM (meta/llama-3.1-70b-instruct)'],
+        logs: ['Model: NVIDIA NIM (meta/llama-3.1-70b-instruct)', 'Inference: NVIDIA GPU Cloud'],
         requiresClarification: false
       };
     }
-    return null;
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error?.message || `HTTP ${res.status}`);
   }
 
-  async callGeminiApi(prompt, apiKey) {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+  async callOpenAiApi(prompt, apiKey) {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 1024
+      })
     });
     if (res.ok) {
       const data = await res.json();
       return {
-        reply: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
-        logs: ['Model: Google Gemini 2.0 Flash'],
+        reply: data.choices?.[0]?.message?.content || '',
+        logs: ['Model: OpenAI GPT-4o', 'Inference: OpenAI API'],
         requiresClarification: false
       };
     }
-    return null;
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error?.message || `HTTP ${res.status}`);
+  }
+
+  async callGroqApi(prompt, apiKey) {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 1024
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        reply: data.choices?.[0]?.message?.content || '',
+        logs: ['Model: Groq LPU (llama-3.3-70b-versatile)', 'Inference: Groq Ultra-Fast LPU'],
+        requiresClarification: false
+      };
+    }
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error?.message || `HTTP ${res.status}`);
+  }
+
+  async callOllamaApi(prompt, ollamaUrl, model) {
+    const baseUrl = ollamaUrl.replace(/\/+$/, '');
+    const res = await fetch(`${baseUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: model || 'llama3.2',
+        prompt: prompt,
+        stream: false
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        reply: data.response || '',
+        logs: [`Model: Local Ollama (${model || 'llama3.2'})`, 'Inference: 100% On-Device GPU/CPU'],
+        requiresClarification: false
+      };
+    }
+    throw new Error(`Ollama returned status ${res.status}`);
+  }
+
+  async testProviderKey(provider, apiKey) {
+    if (!apiKey || !apiKey.trim()) {
+      return { success: false, message: 'Please enter a key before testing.' };
+    }
+    try {
+      if (provider === 'gemini') {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`);
+        if (res.ok) return { success: true, message: 'Gemini API Key Verified Successfully!' };
+        const data = await res.json().catch(() => ({}));
+        return { success: false, message: data.error?.message || 'Invalid Gemini API key.' };
+      }
+      if (provider === 'openai') {
+        const res = await fetch('https://api.openai.com/v1/models', {
+          headers: { 'Authorization': `Bearer ${apiKey.trim()}` }
+        });
+        if (res.ok) return { success: true, message: 'OpenAI API Key Verified Successfully!' };
+        const data = await res.json().catch(() => ({}));
+        return { success: false, message: data.error?.message || 'Invalid OpenAI API key.' };
+      }
+      if (provider === 'nvidia') {
+        const res = await fetch('https://integrate.api.nvidia.com/v1/models', {
+          headers: { 'Authorization': `Bearer ${apiKey.trim()}` }
+        });
+        if (res.ok) return { success: true, message: 'NVIDIA NIM API Key Verified Successfully!' };
+        const data = await res.json().catch(() => ({}));
+        return { success: false, message: data.error?.message || 'Invalid NVIDIA NIM API key.' };
+      }
+      if (provider === 'groq') {
+        const res = await fetch('https://api.groq.com/openai/v1/models', {
+          headers: { 'Authorization': `Bearer ${apiKey.trim()}` }
+        });
+        if (res.ok) return { success: true, message: 'Groq API Key Verified Successfully!' };
+        const data = await res.json().catch(() => ({}));
+        return { success: false, message: data.error?.message || 'Invalid Groq API key.' };
+      }
+      return { success: false, message: 'Unknown provider.' };
+    } catch (e) {
+      return { success: false, message: `Connection test error: ${e.message}` };
+    }
   }
 }
 

@@ -185,7 +185,7 @@ export const DownloadView = () => {
             <div className="font-semibold text-slate-200">Quick Installation Steps</div>
             <ol className="space-y-1.5 text-slate-400 list-decimal list-inside">
               <li>Download the Portable ZIP package or Setup batch script.</li>
-              <li>Extract and run <code className="px-1 py-0.5 rounded bg-black text-fuchsia-300 font-mono text-[10px]">KritiAI-Setup.bat</code>.</li>
+              <li>Extract and run <code className="px-1 py-0.5 rounded bg-black text-fuchsia-300 font-mono text-[10px]">KritiAI-Setup.bat</code> (runs defaultly on port 9972).</li>
               <li>Press <code className="px-1 py-0.5 rounded bg-black text-fuchsia-300 font-mono text-[10px]">Ctrl+Shift+Space</code> to summon KritiAI anywhere.</li>
             </ol>
           </div>

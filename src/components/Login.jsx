@@ -39,7 +39,7 @@ const Login = () => {
   return (
     <div className="flex h-screen items-center justify-center bg-slate-50 text-slate-900">
       <div className="w-full max-w-md p-8 bg-white rounded-lg shadow-xl border border-slate-200">
-        <h2 className="text-3xl font-bold mb-6 text-center text-cyan-600">Login to KittyAI</h2>
+        <h2 className="text-3xl font-bold mb-6 text-center text-cyan-600">Login to KritiAI</h2>
         {error && <div className="bg-red-100 text-red-700 p-2 mb-4 rounded text-sm">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

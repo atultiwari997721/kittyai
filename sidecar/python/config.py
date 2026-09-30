@@ -10,7 +10,7 @@ load_dotenv(dotenv_path=current_dir / ".env")
 load_dotenv(dotenv_path=root_dir / ".env")
 
 class Settings(BaseSettings):
-    APP_NAME: str = "KittyAI Background Sidecar"
+    APP_NAME: str = "KritiAI Background Sidecar"
     VERSION: str = "1.0.0"
     DEBUG: bool = False
     
@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     ENABLE_FAILSAFE: bool = os.getenv("ENABLE_FAILSAFE", "true").lower() == "true"
     
     # Meeting Delegate
-    MEETING_DELEGATE_NAME: str = os.getenv("MEETING_DELEGATE_NAME", "KittyAI Delegate")
+    MEETING_DELEGATE_NAME: str = os.getenv("MEETING_DELEGATE_NAME", "KritiAI Delegate")
     MEETING_HEADLESS: bool = os.getenv("MEETING_HEADLESS", "true").lower() == "true"
     WHISPER_MODEL_SIZE: str = os.getenv("WHISPER_MODEL_SIZE", "base")
     

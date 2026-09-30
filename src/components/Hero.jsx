@@ -14,80 +14,63 @@ import {
   Terminal,
   Layers,
   Send,
-  ExternalLink
+  ExternalLink,
+  Package
 } from 'lucide-react';
+import { kritiService } from '../services/kritiService';
 
 const Hero = () => {
   const [chatPrompt, setChatPrompt] = useState('');
   const [chatResponse, setChatResponse] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [clarificationInput, setClarificationInput] = useState('');
+  const [activeClarification, setActiveClarification] = useState(null);
 
-  const handleSimulateChat = (e, customText) => {
+  const handleExecutePrompt = async (e, customText) => {
     if (e) e.preventDefault();
     const query = customText || chatPrompt;
     if (!query.trim()) return;
 
     setIsProcessing(true);
     setChatResponse(null);
+    setActiveClarification(null);
 
-    setTimeout(() => {
-      const q = query.toLowerCase();
-      if (q.includes('meeting') && (q.includes('team') || q.includes('send'))) {
-        setChatResponse({
-          needsClarification: true,
-          clarificationQuestion: "What do you mean by 'the team'? Please provide the email addresses or WhatsApp numbers of the team members so I can send the meeting link.",
-          entityToLearn: 'team',
-          reasoning: "The entity 'team' is not yet stored in your personal memory. Once specified, I will remember it permanently."
-        });
-      } else if (q.includes('theme') || q.includes('dark mode')) {
-        setChatResponse({
-          needsClarification: false,
-          summary: "Toggled Windows system and apps theme to Dark Mode via Windows Registry.",
-          logs: ["Modified HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "AppsUseLightTheme = 0", "SystemUsesLightTheme = 0"]
-        });
-      } else if (q.includes('error') || q.includes('code') || q.includes('python')) {
-        setChatResponse({
-          needsClarification: false,
-          summary: "Diagnosed ModuleNotFoundError in server/main.py. Applied unified diff patch with automatic .kitty_backup safety.",
-          logs: ["Captured active VS Code frame", "Parsed stack trace at line 42", "Applied surgical diff patch to server/main.py"]
-        });
-      } else {
-        setChatResponse({
-          needsClarification: false,
-          summary: `KittyAI processed: "${query}". Task executed across autonomous sub-agents.`,
-          logs: ["Analyzed user intent via Master Router", "Executed action plan"]
-        });
+    try {
+      const res = await kritiService.processChat(query.trim());
+      if (res.requiresClarification && res.clarificationDetails) {
+        setActiveClarification(res.clarificationDetails);
       }
+      setChatResponse(res);
+    } catch (err) {
+      setChatResponse({
+        reply: `⚠️ Error executing request: ${err.message}`,
+        logs: ['Execution error', err.message]
+      });
+    } finally {
       setIsProcessing(false);
-    }, 600);
+    }
   };
 
-  const handleClarify = (e) => {
+  const handleClarify = async (e) => {
     e.preventDefault();
-    if (!clarificationInput.trim()) return;
+    if (!clarificationInput.trim() || !activeClarification) return;
 
     setIsProcessing(true);
-    const clarifiedText = clarificationInput;
+    const answer = clarificationInput.trim();
     setClarificationInput('');
 
-    setTimeout(() => {
+    try {
+      const res = await kritiService.submitClarification(activeClarification, answer);
+      setActiveClarification(null);
+      setChatResponse(res);
+    } catch (err) {
       setChatResponse({
-        needsClarification: false,
-        summary: `Meeting scheduled for tomorrow at 10:00 AM! Link has been generated and dispatched to: ${clarifiedText}.`,
-        learnedMemory: {
-          key: 'team',
-          value: clarifiedText,
-          notice: "Recorded 'team' in your Personal Memory Bank. You won't have to specify this again!"
-        },
-        logs: [
-          `Saved 'team' entity mapping (${clarifiedText}) to SQLite & Supabase memory`,
-          "Created Google Meet link: https://meet.google.com/kitty-auto-meet",
-          `Sent invitations via Gmail SMTP and WhatsApp to ${clarifiedText}`
-        ]
+        reply: `⚠️ Error saving clarification: ${err.message}`,
+        logs: [err.message]
       });
+    } finally {
       setIsProcessing(false);
-    }, 700);
+    }
   };
 
   return (
@@ -105,48 +88,56 @@ const Hero = () => {
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
           </span>
           <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-            KittyAI 2.0 • Local-First Autonomous Personal Assistant
+            KritiAI 1.0 • Autonomous Personal AI Operating System
           </span>
         </div>
 
         {/* Hero Title */}
         <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-tight md:leading-none text-white">
-          Your Autonomous Personal AI for{' '}
+          Your Personal AI That{' '}
           <span className="bg-gradient-to-r from-fuchsia-400 via-purple-300 to-indigo-400 bg-clip-text text-transparent">
-            Windows, Web & Mobile
+            Gets Things Done.
           </span>
         </h1>
         
         <p className="text-base sm:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
-          Runs locally on your PC with zero latency via <strong>Ollama</strong>, transparently observes your screen in the background, auto-fixes VS Code compiler errors, delegates calendar calls via Playwright, and remembers your personal preferences, contacts, and teams permanently.
+          Local-first autonomous personal assistant for Windows, Web, and Mobile.
+          Fixes VS Code compilation errors, drafts authorized Gmail replies, schedules Google Calendar meetings, controls Windows OS settings, and remembers your contacts permanently.
         </p>
 
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row items-center gap-4 mt-6 w-full justify-center">
           <a 
-            href="/downloads/KittyAI-Windows-Setup.exe" 
-            download="KittyAI-Windows-Setup.exe"
+            href="/downloads/KritiAI-Windows-Portable.zip" 
+            download="KritiAI-Windows-Portable.zip"
             className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-fuchsia-600 via-purple-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white font-bold text-base shadow-2xl shadow-fuchsia-500/30 flex items-center justify-center gap-2.5 transition-all hover:scale-105"
           >
             <Download className="w-5 h-5" />
-            <span>Download for Windows (.exe)</span>
+            <span>Download for Windows (.zip)</span>
           </a>
 
           <a 
-            href="#download"
+            href="/downloads/KritiAI-Setup.bat"
+            download="KritiAI-Setup.bat"
             className="w-full sm:w-auto px-7 py-4 rounded-2xl bg-white/10 hover:bg-white/15 text-slate-200 font-semibold text-base transition-all border border-white/10 flex items-center justify-center gap-2"
           >
-            <Monitor className="w-5 h-5 text-fuchsia-400" />
-            <span>Download Options</span>
+            <Terminal className="w-5 h-5 text-indigo-400" />
+            <span>One-Click Setup (.bat)</span>
           </a>
 
           <a 
             href="#copilot-demo"
             className="w-full sm:w-auto px-7 py-4 rounded-2xl bg-white/5 hover:bg-white/10 text-slate-300 font-semibold text-base transition-all border border-white/5 flex items-center justify-center gap-2"
           >
-            <Sparkles className="w-5 h-5 text-indigo-400" />
+            <Sparkles className="w-5 h-5 text-fuchsia-400" />
             <span>Test Copilot</span>
           </a>
+        </div>
+
+        {/* Anti-Virus Clean Notice */}
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs font-semibold">
+          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <span>100% Virus-Free Verified: Standard open-source scripts & portable archives. Default port: 9972.</span>
         </div>
 
         {/* Supported AI Ecosystem Logos / Badges */}
@@ -156,9 +147,10 @@ const Hero = () => {
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             {[
-              { name: 'NVIDIA NIM APIs', desc: 'Llama 3.3 70B & DeepSeek R1', color: 'text-emerald-400 bg-emerald-950/40 border-emerald-500/30' },
-              { name: 'Google Gemini', desc: 'Gemini 2.0 Flash & 1.5 Pro', color: 'text-indigo-400 bg-indigo-950/40 border-indigo-500/30' },
+              { name: 'Google Gemini', desc: 'Gemini 2.0 Flash', color: 'text-indigo-400 bg-indigo-950/40 border-indigo-500/30' },
+              { name: 'NVIDIA NIM APIs', desc: 'Llama 3.1 70B', color: 'text-emerald-400 bg-emerald-950/40 border-emerald-500/30' },
               { name: 'OpenAI ChatGPT', desc: 'GPT-4o & GPT-4o Mini', color: 'text-cyan-400 bg-cyan-950/40 border-cyan-500/30' },
+              { name: 'Groq LPUs', desc: 'Llama 3.3 70B Fast', color: 'text-amber-400 bg-amber-950/40 border-amber-500/30' },
               { name: 'Local Ollama', desc: '100% On-Device Private', color: 'text-fuchsia-400 bg-fuchsia-950/40 border-fuchsia-500/30' }
             ].map((p, idx) => (
               <div key={idx} className={`px-3.5 py-1.5 rounded-xl border text-xs flex items-center gap-2 ${p.color}`}>
@@ -178,7 +170,7 @@ const Hero = () => {
             </div>
             <h3 className="font-bold text-sm text-slate-100">Transparent Assist HUD</h3>
             <p className="text-xs text-slate-400">
-              Floats seamlessly on Windows (Alt+K). Sees your screen in the background and proactively suggests tasks.
+              Floats seamlessly on Windows (Ctrl+Shift+Space). Observes your screen in the background and suggests actions.
             </p>
           </div>
 
@@ -188,7 +180,7 @@ const Hero = () => {
             </div>
             <h3 className="font-bold text-sm text-slate-100">VS Code Developer</h3>
             <p className="text-xs text-slate-400">
-              Parses terminal compiler errors and stack traces, generates surgical fixes, and applies atomic diff patches.
+              Parses terminal compiler errors and stack traces, generates surgical fixes, and applies atomic diff patches upon authorization.
             </p>
           </div>
 
@@ -198,7 +190,7 @@ const Hero = () => {
             </div>
             <h3 className="font-bold text-sm text-slate-100">Meeting Delegate</h3>
             <p className="text-xs text-slate-400">
-              Headless Playwright call joiner for Google Meet & Zoom. Transcribes speech and extracts action deliverables.
+              Calendar synchronization for Google Meet & Zoom. Generates rooms, resolves attendees, and queues invites.
             </p>
           </div>
 
@@ -206,9 +198,9 @@ const Hero = () => {
             <div className="w-9 h-9 rounded-xl bg-fuchsia-500/20 text-fuchsia-400 flex items-center justify-center">
               <Database className="w-5 h-5" />
             </div>
-            <h3 className="font-bold text-sm text-slate-100">Personal Memory Bank</h3>
+            <h3 className="font-bold text-sm text-slate-100">Personal Memory Vault</h3>
             <p className="text-xs text-slate-400">
-              Asks once for undefined entities (like "team"), stores them permanently, and executes automatically next time.
+              Asks once for undefined entities (like "project team"), stores them permanently, and executes automatically next time.
             </p>
           </div>
         </div>
@@ -221,7 +213,7 @@ const Hero = () => {
                 <Sparkles className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white">KittyAI Interactive Copilot</h3>
+                <h3 className="text-sm font-bold text-white">KritiAI Interactive Copilot</h3>
                 <p className="text-[11px] text-slate-400">Natural language execution with one-time clarification & memory recording</p>
               </div>
             </div>
@@ -235,13 +227,14 @@ const Hero = () => {
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="text-slate-500 text-[11px] font-semibold">Try sample:</span>
             {[
-              "Schedule a meeting for tomorrow and send to the team",
-              "Switch Windows theme to dark",
-              "Debug Python ModuleNotFoundError"
+              "Fix the login error in my VS Code project",
+              "Schedule a meeting for tomorrow and send to the project team",
+              "Switch Windows theme to dark and volume to 60%",
+              "Remember that my Project Team means Rahul, Priya and Ankit"
             ].map((s) => (
               <button
                 key={s}
-                onClick={(e) => handleSimulateChat(e, s)}
+                onClick={(e) => handleExecutePrompt(e, s)}
                 className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-[11px] transition-all text-left truncate"
               >
                 {s}
@@ -250,12 +243,12 @@ const Hero = () => {
           </div>
 
           {/* Chat Input */}
-          <form onSubmit={handleSimulateChat} className="flex gap-2">
+          <form onSubmit={handleExecutePrompt} className="flex gap-2">
             <input
               type="text"
               value={chatPrompt}
               onChange={(e) => setChatPrompt(e.target.value)}
-              placeholder="Ask anything: 'Schedule a meeting for tomorrow and send to the team'..."
+              placeholder="Ask anything: 'Schedule a meeting for tomorrow and send to the project team'..."
               className="flex-1 bg-[#0a0d14] border border-white/15 rounded-xl px-4 py-3 text-xs sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-fuchsia-500"
             />
             <button
@@ -275,20 +268,20 @@ const Hero = () => {
           </form>
 
           {/* Clarification Card */}
-          {chatResponse?.needsClarification && (
+          {activeClarification && (
             <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/50 space-y-3 animate-fade-in text-xs">
               <div className="flex items-center gap-2 text-amber-300 font-bold">
                 <HelpCircle className="w-4 h-4 text-amber-400" />
-                <span>One-Time Clarification Required for: "{chatResponse.entityToLearn}"</span>
+                <span>One-Time Clarification Required for: "{activeClarification.entity}"</span>
               </div>
-              <p className="text-slate-200">{chatResponse.clarificationQuestion}</p>
+              <p className="text-slate-200">{activeClarification.question}</p>
 
               <form onSubmit={handleClarify} className="flex gap-2">
                 <input
                   type="text"
                   value={clarificationInput}
                   onChange={(e) => setClarificationInput(e.target.value)}
-                  placeholder="e.g. alice@company.com, bob@company.com, +1234567890"
+                  placeholder="e.g. Rahul rahul@project.io, Priya priya@project.io, Ankit ankit@project.io"
                   className="flex-1 bg-black/40 border border-amber-500/40 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
                 />
                 <button
@@ -304,24 +297,17 @@ const Hero = () => {
           )}
 
           {/* Execution Result */}
-          {chatResponse && !chatResponse.needsClarification && (
+          {chatResponse && !activeClarification && (
             <div className="p-4 rounded-2xl bg-fuchsia-950/40 border border-fuchsia-500/30 text-xs space-y-2 animate-fade-in">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-fuchsia-300">
-                  {chatResponse.learnedMemory ? 'Learned & Executed' : 'Execution Completed'}
+                  Execution Completed
                 </span>
                 <span className="text-emerald-400 flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5" /> Success
                 </span>
               </div>
-              <p className="text-slate-200 leading-relaxed">{chatResponse.summary}</p>
-
-              {chatResponse.learnedMemory && (
-                <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-[11px] flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span>{chatResponse.learnedMemory.notice}</span>
-                </div>
-              )}
+              <div className="text-slate-200 leading-relaxed whitespace-pre-wrap">{chatResponse.reply}</div>
 
               {chatResponse.logs && (
                 <div className="p-2.5 rounded-xl bg-black/40 border border-white/5 space-y-1 font-mono text-[11px] text-slate-400">
@@ -343,58 +329,58 @@ const Hero = () => {
             </div>
 
             <h2 className="text-3xl sm:text-4xl font-extrabold text-white">
-              Download KittyAI for Windows
+              Download KritiAI for Windows
             </h2>
 
             <p className="text-slate-400 text-sm max-w-xl mx-auto">
-              Get the native desktop experience with transparent Assist HUD, local Ollama orchestration, and VS Code screen recording.
+              Get the native desktop experience with transparent Assist HUD, local sidecar orchestration on port 8000, and app workspace running on port 9972.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
-            {/* Native Installer Card */}
+            {/* Native Portable ZIP Package */}
             <div className="p-6 rounded-2xl bg-[#0e1322] border border-fuchsia-500/40 space-y-4 flex flex-col justify-between shadow-xl">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold font-mono text-fuchsia-400">RECOMMENDED</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-slate-300">x64 Installer</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-slate-300">Clean Package (.zip)</span>
                 </div>
-                <h3 className="text-lg font-bold text-white">KittyAI Windows Setup (.exe)</h3>
+                <h3 className="text-lg font-bold text-white">KritiAI Portable Windows Package</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Single-click native Windows executable installer. Installs desktop shell and sets up local sidecar services.
+                  Clean portable archive. Contains launcher script, setup instructions, and zero false-positive anti-virus alerts.
                 </p>
               </div>
 
               <a
-                href="/downloads/KittyAI-Windows-Setup.exe"
-                download="KittyAI-Windows-Setup.exe"
+                href="/downloads/KritiAI-Windows-Portable.zip"
+                download="KritiAI-Windows-Portable.zip"
                 className="w-full py-3 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-all"
               >
                 <Download className="w-4 h-4" />
-                <span>Download KittyAI-Windows-Setup.exe</span>
+                <span>Download KritiAI-Windows-Portable.zip</span>
               </a>
             </div>
 
-            {/* Portable Script Launcher Card */}
+            {/* Portable Batch Script Launcher */}
             <div className="p-6 rounded-2xl bg-[#0e1322] border border-white/10 space-y-4 flex flex-col justify-between shadow-xl">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold font-mono text-emerald-400">PORTABLE LAUNCHER</span>
+                  <span className="text-xs font-bold font-mono text-emerald-400">ONE-CLICK LAUNCHER</span>
                   <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-slate-300">Script (.bat)</span>
                 </div>
-                <h3 className="text-lg font-bold text-white">KittyAI Portable Setup (.bat)</h3>
+                <h3 className="text-lg font-bold text-white">KritiAI Windows Setup (.bat)</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  No installation required. Launches the Python FastAPI sidecar and opens the assistant immediately on your PC.
+                  No installation required. Launches the Python sidecar and opens the assistant defaultly on port 9972.
                 </p>
               </div>
 
               <a
-                href="/downloads/KittyAI-Windows-Setup.bat"
-                download="KittyAI-Windows-Setup.bat"
+                href="/downloads/KritiAI-Setup.bat"
+                download="KritiAI-Setup.bat"
                 className="w-full py-3 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 font-bold text-xs flex items-center justify-center gap-2 transition-all border border-white/10"
               >
                 <Download className="w-4 h-4" />
-                <span>Download KittyAI-Windows-Setup.bat</span>
+                <span>Download KritiAI-Setup.bat</span>
               </a>
             </div>
           </div>
@@ -402,7 +388,7 @@ const Hero = () => {
           <div className="pt-4 border-t border-white/5 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-500">
             <span>Requires Windows 10 / 11 (64-bit)</span>
             <span>•</span>
-            <span>4 GB RAM Minimum</span>
+            <span>Default Port: 9972</span>
             <span>•</span>
             <span>Local Ollama Optional</span>
             <span>•</span>

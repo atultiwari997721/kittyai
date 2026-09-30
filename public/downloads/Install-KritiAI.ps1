@@ -51,8 +51,9 @@ if (Test-Path $sidecarMain) {
 }
 
 # 4. Open Desktop App
-Write-Host "[4/4] Opening KritiAI workspace..." -ForegroundColor Yellow
-Start-Process "http://localhost:5173"
+Write-Host "[4/4] Opening KritiAI workspace on port 9972..." -ForegroundColor Yellow
+Start-Process "http://localhost:9972"
+
 
 Write-Host ""
 Write-Host "===================================================================" -ForegroundColor Cyan

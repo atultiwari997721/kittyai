@@ -40,7 +40,7 @@ from sidecar.python.agents.meeting_agent import meeting_agent
 from sidecar.python.agents.plugin_agent import plugin_agent
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-logger = logging.getLogger("kittyai.server")
+logger = logging.getLogger("kritiai.server")
 
 # Active WebSocket connections
 active_connections: Set[WebSocket] = set()
@@ -70,11 +70,11 @@ os_agent.register_assist_callback(on_assist_observation)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Initializing KittyAI Background Sidecar Engine...")
+    logger.info("Initializing KritiAI Background Sidecar Engine...")
     models = await orchestrator.list_available_models()
     logger.info(f"Discovered {len(models)} AI models. Active: {orchestrator.active_model_id}")
     yield
-    logger.info("Shutting down KittyAI Sidecar...")
+    logger.info("Shutting down KritiAI Sidecar...")
     await os_agent.stop_assist_mode()
 
 app = FastAPI(

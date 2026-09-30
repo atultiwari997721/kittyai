@@ -11,15 +11,20 @@ import {
   ExternalLink,
   Lock,
   Volume2,
-  Database
+  Database,
+  Sparkles,
+  AlertCircle,
+  CheckCircle2
 } from 'lucide-react';
-import { kittyService } from '../services/kittyService';
+import { kritiService } from '../services/kritiService';
 
 export const SettingsView = () => {
-  const [settings, setSettings] = useState(kittyService.getSettings());
+  const [settings, setSettings] = useState(kritiService.getSettings());
   const [isSaved, setIsSaved] = useState(false);
   const [isTestingSidecar, setIsTestingSidecar] = useState(false);
   const [sidecarStatus, setSidecarStatus] = useState(null);
+  const [keyTesting, setKeyTesting] = useState({});
+  const [keyResults, setKeyResults] = useState({});
 
   useEffect(() => {
     checkSidecar();
@@ -27,19 +32,33 @@ export const SettingsView = () => {
 
   const checkSidecar = async () => {
     setIsTestingSidecar(true);
-    const online = await kittyService.checkSidecarHealth();
+    const online = await kritiService.checkSidecarHealth();
     setSidecarStatus(online ? 'online' : 'offline');
     setIsTestingSidecar(false);
   };
 
   const handleSave = (e) => {
-    e.preventDefault();
-    kittyService.saveSettings(settings);
+    if (e) e.preventDefault();
+    kritiService.saveSettings(settings);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2500);
   };
 
+  const testKey = async (provider, key) => {
+    setKeyTesting(prev => ({ ...prev, [provider]: true }));
+    setKeyResults(prev => ({ ...prev, [provider]: null }));
+    const res = await kritiService.testProviderKey(provider, key);
+    setKeyTesting(prev => ({ ...prev, [provider]: false }));
+    setKeyResults(prev => ({ ...prev, [provider]: res }));
+  };
+
   const models = [
+    {
+      id: 'gemini-2.0',
+      name: 'Google Gemini 2.0 Flash',
+      badge: 'Multimodal',
+      desc: 'Google DeepMind ultra-fast reasoning model with streaming analysis'
+    },
     {
       id: 'nvidia-nim',
       name: 'NVIDIA NIM (Cloud)',
@@ -47,16 +66,10 @@ export const SettingsView = () => {
       desc: 'High-performance cloud inference via NVIDIA integrate.api.nvidia.com'
     },
     {
-      id: 'gemini-2.0',
-      name: 'Google Gemini 2.0 Flash',
-      badge: 'Multimodal',
-      desc: 'Google DeepMind next-generation ultra-fast reasoning model'
-    },
-    {
       id: 'gpt-4o',
       name: 'OpenAI GPT-4o',
       badge: 'Omni Reasoning',
-      desc: 'OpenAI flagship model with versatile tool execution'
+      desc: 'OpenAI flagship model with versatile tool execution & code intelligence'
     },
     {
       id: 'groq-llama3',
@@ -67,13 +80,13 @@ export const SettingsView = () => {
     {
       id: 'ollama',
       name: 'Local Ollama (Offline)',
-      badge: 'Private & Local',
+      badge: '100% Private',
       desc: 'Runs completely on your local machine GPU/CPU without internet'
     }
   ];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6 pb-20 lg:pb-6">
       {/* Header */}
       <div className="glass-panel p-6 rounded-3xl border border-white/5 shadow-2xl flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -105,7 +118,7 @@ export const SettingsView = () => {
             <span>Active Inference Engine</span>
           </h2>
           <p className="text-xs text-slate-400">
-            Select the primary AI brain KittyAI utilizes to analyze requests and orchestrate actions.
+            Select the primary AI brain KritiAI utilizes to analyze requests, classify intents, and orchestrate actions.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
@@ -136,49 +149,42 @@ export const SettingsView = () => {
           </div>
         </div>
 
-        {/* API Keys Configuration */}
+        {/* API Keys Configuration with Live Test Verification */}
         <div className="glass-panel p-6 rounded-3xl border border-white/5 space-y-4">
           <h2 className="text-sm font-bold text-white flex items-center gap-2">
             <Key className="w-4 h-4 text-indigo-400" />
-            <span>AI Provider API Keys (Stored Safely in Local Storage)</span>
+            <span>AI Provider API Keys (Stored Safely in Local Storage Vault)</span>
           </h2>
           <p className="text-xs text-slate-400">
-            Your keys remain strictly on your client device or local sidecar. They are never transmitted to third parties.
+            Your keys remain strictly on your client device or local sidecar. They are never sent to unverified servers.
           </p>
 
-          <div className="space-y-3.5 text-xs">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-slate-300 font-medium">NVIDIA NIM API Key</label>
-                <a 
-                  href="https://build.nvidia.com" 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="text-fuchsia-400 hover:underline flex items-center gap-1 text-[11px]"
-                >
-                  Get NVIDIA Key <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-              <input
-                type="password"
-                placeholder="nvapi-..."
-                value={settings.nvidiaApiKey}
-                onChange={(e) => setSettings(prev => ({ ...prev, nvidiaApiKey: e.target.value }))}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono"
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-slate-300 font-medium">Google Gemini API Key</label>
-                <a 
-                  href="https://aistudio.google.com" 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="text-fuchsia-400 hover:underline flex items-center gap-1 text-[11px]"
-                >
-                  Get Gemini Key <ExternalLink className="w-3 h-3" />
-                </a>
+          <div className="space-y-4 text-xs">
+            {/* Google Gemini */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-slate-300 font-medium flex items-center gap-1.5">
+                  <span>Google Gemini API Key</span>
+                  <span className="text-[10px] text-slate-500 font-normal">(Gemini 2.0 Flash)</span>
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => testKey('gemini', settings.geminiApiKey)}
+                    disabled={keyTesting.gemini || !settings.geminiApiKey}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 transition disabled:opacity-40"
+                  >
+                    {keyTesting.gemini ? 'Testing...' : 'Test Key'}
+                  </button>
+                  <a 
+                    href="https://aistudio.google.com" 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="text-fuchsia-400 hover:underline flex items-center gap-1 text-[11px]"
+                  >
+                    Get Gemini Key <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
               </div>
               <input
                 type="password"
@@ -187,19 +193,41 @@ export const SettingsView = () => {
                 onChange={(e) => setSettings(prev => ({ ...prev, geminiApiKey: e.target.value }))}
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono"
               />
+              {keyResults.gemini && (
+                <div className={`p-2 rounded-lg text-[11px] flex items-center gap-1.5 ${
+                  keyResults.gemini.success ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950/60 text-rose-300 border border-rose-500/30'
+                }`}>
+                  {keyResults.gemini.success ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                  <span>{keyResults.gemini.message}</span>
+                </div>
+              )}
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-slate-300 font-medium">OpenAI API Key</label>
-                <a 
-                  href="https://platform.openai.com/api-keys" 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="text-fuchsia-400 hover:underline flex items-center gap-1 text-[11px]"
-                >
-                  Get OpenAI Key <ExternalLink className="w-3 h-3" />
-                </a>
+            {/* OpenAI */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-slate-300 font-medium flex items-center gap-1.5">
+                  <span>OpenAI API Key</span>
+                  <span className="text-[10px] text-slate-500 font-normal">(GPT-4o)</span>
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => testKey('openai', settings.openaiApiKey)}
+                    disabled={keyTesting.openai || !settings.openaiApiKey}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 transition disabled:opacity-40"
+                  >
+                    {keyTesting.openai ? 'Testing...' : 'Test Key'}
+                  </button>
+                  <a 
+                    href="https://platform.openai.com/api-keys" 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="text-fuchsia-400 hover:underline flex items-center gap-1 text-[11px]"
+                  >
+                    Get OpenAI Key <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
               </div>
               <input
                 type="password"
@@ -208,19 +236,84 @@ export const SettingsView = () => {
                 onChange={(e) => setSettings(prev => ({ ...prev, openaiApiKey: e.target.value }))}
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono"
               />
+              {keyResults.openai && (
+                <div className={`p-2 rounded-lg text-[11px] flex items-center gap-1.5 ${
+                  keyResults.openai.success ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950/60 text-rose-300 border border-rose-500/30'
+                }`}>
+                  {keyResults.openai.success ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                  <span>{keyResults.openai.message}</span>
+                </div>
+              )}
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-slate-300 font-medium">Groq API Key</label>
-                <a 
-                  href="https://console.groq.com/keys" 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="text-fuchsia-400 hover:underline flex items-center gap-1 text-[11px]"
-                >
-                  Get Groq Key <ExternalLink className="w-3 h-3" />
-                </a>
+            {/* NVIDIA NIM */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-slate-300 font-medium flex items-center gap-1.5">
+                  <span>NVIDIA NIM API Key</span>
+                  <span className="text-[10px] text-slate-500 font-normal">(Llama 3.1 70B)</span>
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => testKey('nvidia', settings.nvidiaApiKey)}
+                    disabled={keyTesting.nvidia || !settings.nvidiaApiKey}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 transition disabled:opacity-40"
+                  >
+                    {keyTesting.nvidia ? 'Testing...' : 'Test Key'}
+                  </button>
+                  <a 
+                    href="https://build.nvidia.com" 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="text-fuchsia-400 hover:underline flex items-center gap-1 text-[11px]"
+                  >
+                    Get NVIDIA Key <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+              <input
+                type="password"
+                placeholder="nvapi-..."
+                value={settings.nvidiaApiKey}
+                onChange={(e) => setSettings(prev => ({ ...prev, nvidiaApiKey: e.target.value }))}
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono"
+              />
+              {keyResults.nvidia && (
+                <div className={`p-2 rounded-lg text-[11px] flex items-center gap-1.5 ${
+                  keyResults.nvidia.success ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950/60 text-rose-300 border border-rose-500/30'
+                }`}>
+                  {keyResults.nvidia.success ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                  <span>{keyResults.nvidia.message}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Groq */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-slate-300 font-medium flex items-center gap-1.5">
+                  <span>Groq API Key</span>
+                  <span className="text-[10px] text-slate-500 font-normal">(Llama 3.3 70B Fast LPU)</span>
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => testKey('groq', settings.groqApiKey)}
+                    disabled={keyTesting.groq || !settings.groqApiKey}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 transition disabled:opacity-40"
+                  >
+                    {keyTesting.groq ? 'Testing...' : 'Test Key'}
+                  </button>
+                  <a 
+                    href="https://console.groq.com/keys" 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="text-fuchsia-400 hover:underline flex items-center gap-1 text-[11px]"
+                  >
+                    Get Groq Key <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
               </div>
               <input
                 type="password"
@@ -229,6 +322,14 @@ export const SettingsView = () => {
                 onChange={(e) => setSettings(prev => ({ ...prev, groqApiKey: e.target.value }))}
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-slate-200 focus:outline-none focus:border-fuchsia-500 font-mono"
               />
+              {keyResults.groq && (
+                <div className={`p-2 rounded-lg text-[11px] flex items-center gap-1.5 ${
+                  keyResults.groq.success ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950/60 text-rose-300 border border-rose-500/30'
+                }`}>
+                  {keyResults.groq.success ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                  <span>{keyResults.groq.message}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -283,15 +384,15 @@ export const SettingsView = () => {
             <div className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 border ${
               sidecarStatus === 'online'
                 ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
-                : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+                : 'bg-cyan-950/60 border-cyan-500/40 text-cyan-300'
             }`}>
               <span className={`w-2 h-2 rounded-full ${
-                sidecarStatus === 'online' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                sidecarStatus === 'online' ? 'bg-emerald-400 animate-pulse' : 'bg-cyan-400'
               }`}></span>
               <span>
                 {sidecarStatus === 'online'
                   ? 'Python Sidecar Connected (Port 8000)'
-                  : 'Sidecar Offline — Running via Native Browser Intelligence Engine'}
+                  : 'Native Browser Engine Active (Direct multi-model inference & local vault)'}
               </span>
             </div>
           </div>
@@ -324,7 +425,7 @@ export const SettingsView = () => {
               <div>
                 <div className="font-semibold text-slate-200">Text-to-Speech Voice Output</div>
                 <div className="text-slate-400 text-[11px]">
-                  Read KittyAI assistant responses aloud using browser speech synthesis
+                  Read KritiAI assistant responses aloud using browser speech synthesis
                 </div>
               </div>
               <input

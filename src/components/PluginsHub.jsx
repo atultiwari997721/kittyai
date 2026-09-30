@@ -17,9 +17,12 @@ import {
   Sparkles,
   Smartphone,
   Cpu,
-  Power
+  Power,
+  Key,
+  HelpCircle,
+  X
 } from 'lucide-react';
-import { kittyService } from '../services/kittyService';
+import { kritiService } from '../services/kritiService';
 
 export const PluginsHub = () => {
   // Plugin toggles
@@ -32,20 +35,25 @@ export const PluginsHub = () => {
     webScraper: true
   });
 
+  // Google OAuth modal state
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState('');
+  const [googleConnected, setGoogleConnected] = useState(false);
+
   // Email form state
-  const [emailTo, setEmailTo] = useState('team@example.com');
-  const [emailSubject, setEmailSubject] = useState('Sync: Product Architecture Review');
-  const [emailBody, setEmailBody] = useState('Hello Team,\n\nAttaching the architectural roadmap for the upcoming sprint.\n\nBest regards,\nKittyAI');
+  const [emailTo, setEmailTo] = useState('rahul@project.io');
+  const [emailSubject, setEmailSubject] = useState('Sync: Product Architecture & Next Sprint');
+  const [emailBody, setEmailBody] = useState('Hello Team,\n\nAttaching the finalized architectural roadmap for the upcoming sprint. All tests are passing.\n\nBest regards,\nKritiAI on behalf of Atul');
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailResult, setEmailResult] = useState(null);
 
   // WhatsApp form state
-  const [waPhone, setWaPhone] = useState('+1-555-0199');
-  const [waMessage, setWaMessage] = useState('Hi Alex, meeting invite dispatched for tomorrow at 10 AM!');
+  const [waPhone, setWaPhone] = useState('+91-98765-43210');
+  const [waMessage, setWaMessage] = useState('Hi Rahul, team sync has been scheduled for tomorrow at 5 PM!');
   const [isSendingWa, setIsSendingWa] = useState(false);
   const [waResult, setWaResult] = useState(null);
 
-  // OS Automation form state
+  // OS Automation state
   const [osAction, setOsAction] = useState('Launch VS Code');
   const [osResult, setOsResult] = useState(null);
 
@@ -59,14 +67,13 @@ export const PluginsHub = () => {
     setIsSendingEmail(true);
     setEmailResult(null);
 
-    // Simulate or execute email dispatch
-    setTimeout(() => {
-      setIsSendingEmail(false);
-      setEmailResult({
-        success: true,
-        message: `Email dispatched successfully to ${emailTo} via KittyAI Gmail SMTP plugin!`
-      });
-    }, 900);
+    // Creates an approval-tracked task in the system
+    const result = await kritiService.processChat(`Send email to ${emailTo} with subject "${emailSubject}" and body "${emailBody}"`);
+    setIsSendingEmail(false);
+    setEmailResult({
+      success: true,
+      message: `Email draft prepared and queued for authorization in the Task Center!`
+    });
   };
 
   const handleSendWa = async (e) => {
@@ -79,22 +86,31 @@ export const PluginsHub = () => {
       setIsSendingWa(false);
       setWaResult({
         success: true,
-        message: `WhatsApp message transmitted to ${waPhone} via Baileys WebSocket gateway.`
+        message: `WhatsApp message queued for ${waPhone} via Baileys WebSocket gateway.`
       });
-    }, 800);
+    }, 600);
   };
 
-  const handleRunOsAction = (action) => {
+  const handleRunOsAction = async (action) => {
     setOsAction(action);
+    const res = await kritiService.processChat(action);
     setOsResult({
       action,
       time: new Date().toLocaleTimeString(),
-      status: `Command "${action}" dispatched to local Windows Sidecar executor.`
+      status: res.reply || `Action dispatched to Windows Operating System Agent.`
     });
   };
 
+  const handleConnectGoogle = (e) => {
+    e.preventDefault();
+    if (!googleClientId.trim()) return;
+    setGoogleConnected(true);
+    setShowGoogleModal(false);
+    kritiService.saveMemory('google_oauth_client_id', { clientId: googleClientId.trim() }, 'credentials');
+  };
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6 pb-20 lg:pb-6">
       {/* Top Banner */}
       <div className="glass-panel p-6 rounded-3xl border border-white/5 shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
@@ -106,17 +122,77 @@ export const PluginsHub = () => {
             Plugins & Autonomous Agent Hub
           </h1>
           <p className="text-xs text-slate-400 mt-1 max-w-xl">
-            Empower KittyAI to dispatch emails on your behalf, orchestrate WhatsApp conversations, control native Windows apps via PyAutoGUI, and delegate meetings.
+            Empower KritiAI to draft authorized emails, manage Google Calendar meetings, automate native Windows actions via PyAutoGUI, and integrate WhatsApp.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs font-semibold">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>End-to-End Encrypted</span>
-          </div>
+          <button
+            onClick={() => setShowGoogleModal(true)}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border transition ${
+              googleConnected
+                ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                : 'bg-indigo-950/60 border-indigo-500/40 text-indigo-300 hover:bg-indigo-900/50'
+            }`}
+          >
+            <Key className="w-3.5 h-3.5" />
+            <span>{googleConnected ? 'Google Services Connected' : 'Connect Google Workspace'}</span>
+          </button>
         </div>
       </div>
+
+      {/* Google OAuth Modal */}
+      {showGoogleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="glass-panel p-6 rounded-3xl border border-white/10 max-w-md w-full space-y-4 shadow-2xl relative">
+            <button
+              onClick={() => setShowGoogleModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
+                <Globe className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Connect Google Workspace</h3>
+                <p className="text-[11px] text-slate-400">Enables Gmail drafting & Google Calendar sync</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleConnectGoogle} className="space-y-3 text-xs">
+              <div>
+                <label className="text-slate-300 block mb-1">Google OAuth Client ID</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="your-app-id.apps.googleusercontent.com"
+                  value={googleClientId}
+                  onChange={(e) => setGoogleClientId(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500 font-mono text-[11px]"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-[11px] text-indigo-200 space-y-1">
+                <div className="font-semibold">Setup instructions:</div>
+                <p>1. Open Google Cloud Console ➔ APIs & Services ➔ Credentials.</p>
+                <p>2. Configure authorized redirect URI: <code className="bg-black/60 px-1 rounded text-white">http://localhost:9972/api/auth/google/callback</code></p>
+                <p>3. Enable Gmail API and Google Calendar API.</p>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-fuchsia-600 hover:from-indigo-500 hover:to-fuchsia-500 text-white font-medium text-xs flex items-center justify-center gap-2 shadow-lg transition"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Save & Authorize Integration</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Grid of Plugin Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -129,7 +205,7 @@ export const PluginsHub = () => {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-white">Email Copilot (Gmail / SMTP)</h3>
-                <p className="text-[11px] text-slate-400">Autonomous email drafting & dispatch</p>
+                <p className="text-[11px] text-slate-400">Autonomous email drafting with explicit authorization</p>
               </div>
             </div>
             <button 
@@ -178,7 +254,7 @@ export const PluginsHub = () => {
               className="w-full py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white font-medium text-xs flex items-center justify-center gap-2 shadow-lg transition disabled:opacity-40"
             >
               <Send className="w-3.5 h-3.5" />
-              <span>{isSendingEmail ? 'Dispatching...' : 'Dispatch Email via KittyAI'}</span>
+              <span>{isSendingEmail ? 'Preparing...' : 'Draft Email & Queue for Approval'}</span>
             </button>
           </form>
 
@@ -228,7 +304,7 @@ export const PluginsHub = () => {
             <div>
               <label className="text-slate-400 block mb-1">Message Content</label>
               <textarea
-                rows={5}
+                rows={3}
                 value={waMessage}
                 onChange={(e) => setWaMessage(e.target.value)}
                 className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-slate-200 focus:outline-none focus:border-emerald-500"
@@ -283,7 +359,7 @@ export const PluginsHub = () => {
                 'Toggle Dark Mode',
                 'Capture Screen Snapshot',
                 'Adjust System Volume',
-                'Open KittyAI Desktop HUD',
+                'Open Windows Settings',
                 'Inspect System Diagnostics'
               ].map((cmd) => (
                 <button
@@ -293,7 +369,7 @@ export const PluginsHub = () => {
                   className="p-2.5 rounded-xl bg-white/5 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-500/40 text-left text-xs text-slate-200 hover:text-cyan-300 transition"
                 >
                   <div className="font-semibold">{cmd}</div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">PyAutoGUI action</div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">Dispatches OS agent</div>
                 </button>
               ))}
             </div>
@@ -304,7 +380,7 @@ export const PluginsHub = () => {
                   <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
                   <span>{osResult.action}</span>
                 </div>
-                <div className="text-[11px] text-slate-400 mt-1">{osResult.status}</div>
+                <div className="text-[11px] text-slate-300 mt-1 whitespace-pre-wrap">{osResult.status}</div>
               </div>
             )}
           </div>
@@ -347,13 +423,13 @@ export const PluginsHub = () => {
               </div>
               <div className="flex items-center justify-between text-slate-400">
                 <span>Memory Entity Resolution:</span>
-                <span className="text-emerald-400 font-mono">Auto-Sync "team"</span>
+                <span className="text-emerald-400 font-mono">Auto-Sync "project team"</span>
               </div>
             </div>
 
             <div className="p-3 rounded-xl bg-purple-950/60 border border-purple-500/40 text-purple-200">
               <p className="text-[11px] leading-relaxed">
-                When you say <em>"Schedule a meeting for tomorrow"</em> in the Chat Copilot, this plugin automatically calculates the next business day, resolves attendees from your Memory Vault, generates a dedicated Google Meet room, and dispatches calendar invitations.
+                When you say <em>"Schedule a meeting for tomorrow"</em> in the Chat Copilot, this plugin automatically calculates the next business day, resolves attendees from your Memory Vault, generates a dedicated Google Meet room, and queues calendar invitations for your approval.
               </p>
             </div>
           </div>

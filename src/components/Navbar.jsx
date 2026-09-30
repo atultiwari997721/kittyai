@@ -1,16 +1,15 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Sparkles, Download, Zap, MessageSquare, Mail, Monitor, Database } from 'lucide-react';
-import KLogo from './KLogo';
 
 const Navbar = () => {
   const location = useLocation();
   const navItems = [
     { path: '/', label: 'Assistant', icon: Sparkles },
-    { path: '/whatsapp', label: 'WhatsApp', icon: MessageSquare },
-    { path: '/mailai', label: 'MailAi', icon: Mail },
-    { path: '/creative', label: 'Studio', icon: Zap },
-    { path: '/dashboard', label: 'Dashboard', icon: Monitor },
+    { path: '/tasks', label: 'Tasks', icon: Monitor },
+    { path: '/plugins', label: 'Plugins', icon: Mail },
+    { path: '/memory', label: 'Memory', icon: Database },
+    { path: '/settings', label: 'Settings', icon: Zap },
   ];
 
   return (
@@ -22,7 +21,7 @@ const Navbar = () => {
           </div>
           <div className="flex flex-col">
             <span className="font-extrabold text-base tracking-tight bg-gradient-to-r from-fuchsia-300 via-purple-200 to-indigo-300 bg-clip-text text-transparent">
-              KittyAI
+              KritiAI
             </span>
           </div>
         </Link>
@@ -50,14 +49,14 @@ const Navbar = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Direct Windows Download CTA */}
+          {/* Direct Safe Windows Download CTA */}
           <a
-            href="/downloads/KittyAI-Windows-Setup.exe"
-            download="KittyAI-Windows-Setup.exe"
+            href="/downloads/KritiAI-Windows-Portable.zip"
+            download="KritiAI-Windows-Portable.zip"
             className="px-4 py-2 rounded-full bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-fuchsia-500/25 transition-all flex items-center gap-1.5 hover:scale-105"
           >
             <Download size={14} />
-            <span className="hidden sm:inline">Download for Windows</span>
+            <span className="hidden sm:inline">Download Windows</span>
             <span className="sm:hidden">App</span>
           </a>
 
