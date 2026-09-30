@@ -64,6 +64,16 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
           url: 'https://console.groq.com/keys',
           placeholder: 'gsk_...'
         };
+      case 'grok-2':
+        return {
+          provider: 'grok',
+          name: 'xAI Grok',
+          fullName: 'xAI Grok (Grok 2)',
+          keyField: 'grokApiKey',
+          hasKey: !!(kritiService.getApiKey('grok') || (kritiService.getApiKey('groq') && kritiService.getApiKey('groq').startsWith('xai-'))),
+          url: 'https://console.x.ai',
+          placeholder: 'xai-...'
+        };
       case 'gemini-2.0':
         return {
           provider: 'gemini',
@@ -182,7 +192,7 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
     if (e) e.preventDefault();
     if (!modelKeyInput.trim() || !currentKeyInfo.provider) return;
 
-    const trimmed = modelKeyInput.trim();
+    const trimmed = modelKeyInput.trim().replace(/^["'`]|["'`]$/g, '').trim();
     if (currentKeyInfo.keyField) {
       kritiService.saveSettings({ [currentKeyInfo.keyField]: trimmed, activeModel });
     }
@@ -190,11 +200,15 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
     
     const testResult = await kritiService.testProviderKey(currentKeyInfo.provider, trimmed);
     if (testResult.success) {
-      setKeySaveMessage({ type: 'success', text: `${currentKeyInfo.name} key verified! Inference is active.` });
+      if (testResult.provider === 'grok' && activeModel !== 'grok-2') {
+        setActiveModel('grok-2');
+        kritiService.saveSettings({ activeModel: 'grok-2' });
+      }
+      setKeySaveMessage({ type: 'success', text: testResult.message || `${currentKeyInfo.name} key verified! Inference is active.` });
       setTimeout(() => {
         setShowKeyModal(false);
         setKeySaveMessage(null);
-      }, 1400);
+      }, 1500);
     } else {
       setKeySaveMessage({ type: 'error', text: testResult.message || 'Key verification failed.' });
     }
@@ -371,7 +385,8 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
   ];
 
   const modelsList = [
-    { id: 'groq-llama3', label: '⚡ Groq (Llama 3.3 70B)', hasKey: !!kritiService.getApiKey('groq') },
+    { id: 'groq-llama3', label: '⚡ Groq (Llama 3.3 70B)', hasKey: !!(kritiService.getApiKey('groq') && !kritiService.getApiKey('groq').startsWith('xai-')) },
+    { id: 'grok-2', label: '✨ xAI Grok (Grok 2)', hasKey: !!(kritiService.getApiKey('grok') || (kritiService.getApiKey('groq') && kritiService.getApiKey('groq').startsWith('xai-'))) },
     { id: 'gemini-2.0', label: '💎 Gemini 2.0 Flash', hasKey: !!kritiService.getApiKey('gemini') },
     { id: 'gpt-4o', label: '🧠 OpenAI GPT-4o', hasKey: !!kritiService.getApiKey('openai') },
     { id: 'nvidia-nim', label: '🚀 NVIDIA NIM (70B)', hasKey: !!kritiService.getApiKey('nvidia') },

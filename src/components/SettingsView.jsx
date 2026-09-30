@@ -55,15 +55,18 @@ export const SettingsView = () => {
   };
 
   const handleKeyChange = (field, value) => {
+    const clean = typeof value === 'string' ? value.replace(/^["'`]|["'`]$/g, '').trim() : value;
     setSettings(prev => {
-      const next = { ...prev, [field]: value };
-      if (field === 'groqApiKey' && value.trim()) {
+      const next = { ...prev, [field]: clean };
+      if (clean && (field === 'grokApiKey' || (field === 'groqApiKey' && clean.startsWith('xai-')))) {
+        next.activeModel = 'grok-2';
+      } else if (field === 'groqApiKey' && clean) {
         next.activeModel = 'groq-llama3';
       }
       return next;
     });
     // Immediately persist to browser storage so user never loses key!
-    kritiService.saveSettings({ [field]: value });
+    kritiService.saveSettings({ [field]: clean });
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
   };
@@ -88,6 +91,9 @@ export const SettingsView = () => {
     const res = await kritiService.testProviderKey(provider, key);
     setKeyTesting(prev => ({ ...prev, [provider]: false }));
     setKeyResults(prev => ({ ...prev, [provider]: res }));
+    if (res && res.provider === 'grok') {
+      setSettings(prev => ({ ...prev, activeModel: 'grok-2' }));
+    }
   };
 
   const models = [
@@ -96,6 +102,12 @@ export const SettingsView = () => {
       name: 'Groq LPUs (Fastest)',
       badge: 'Llama 3.3 70B',
       desc: 'Sub-second real-time inference via Groq LPUs (300+ tokens/sec)'
+    },
+    {
+      id: 'grok-2',
+      name: 'xAI Grok (Grok 2)',
+      badge: 'xAI Frontier',
+      desc: 'Frontier reasoning & code generation via official api.x.ai'
     },
     {
       id: 'gemini-2.0',
@@ -245,6 +257,49 @@ export const SettingsView = () => {
                 }`}>
                   {keyResults.groq.success ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
                   <span>{keyResults.groq.message}</span>
+                </div>
+              )}
+            </div>
+
+            {/* xAI Grok (Grok 2) */}
+            <div className="space-y-1.5 p-3.5 rounded-2xl bg-black/40 border border-indigo-500/30">
+              <div className="flex items-center justify-between">
+                <label className="text-slate-200 font-bold flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>xAI Grok API Key (Grok 2 • Frontier Intelligence)</span>
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => testKey('grok', settings.grokApiKey)}
+                    disabled={keyTesting.grok || !settings.grokApiKey}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40 transition disabled:opacity-40"
+                  >
+                    {keyTesting.grok ? 'Testing...' : 'Test Key'}
+                  </button>
+                  <a 
+                    href="https://console.x.ai" 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="text-indigo-400 hover:underline flex items-center gap-1 text-[11px]"
+                  >
+                    Get xAI Grok Key <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+              <input
+                type="password"
+                placeholder="xai-..."
+                value={settings.grokApiKey || ''}
+                onChange={(e) => handleKeyChange('grokApiKey', e.target.value)}
+                className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
+              />
+              {keyResults.grok && (
+                <div className={`p-2 rounded-lg text-[11px] flex items-center gap-1.5 ${
+                  keyResults.grok.success ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950/60 text-rose-300 border border-rose-500/30'
+                }`}>
+                  {keyResults.grok.success ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                  <span>{keyResults.grok.message}</span>
                 </div>
               )}
             </div>

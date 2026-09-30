@@ -28,6 +28,7 @@ const DEFAULT_SETTINGS = {
   ollamaUrl: 'http://127.0.0.1:11434',
   ollamaModel: 'llama3.2',
   groqApiKey: '',
+  grokApiKey: '',
   geminiApiKey: '',
   openaiApiKey: '',
   nvidiaApiKey: '',
@@ -69,24 +70,31 @@ class KritiService {
     this.checkSidecarHealth();
   }
 
+  cleanKey(key) {
+    if (!key || typeof key !== 'string') return '';
+    return key.trim().replace(/^["'`]|["'`]$/g, '').trim();
+  }
+
   getSettings() {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
       const parsed = saved ? JSON.parse(saved) : {};
 
       // Prefill any keys stored in dedicated individual localStorage keys
-      const groqKey = localStorage.getItem('groq_api_key') || localStorage.getItem('kritiai_groq_api_key') || '';
-      const geminiKey = localStorage.getItem('gemini_api_key') || localStorage.getItem('kritiai_gemini_api_key') || '';
-      const openaiKey = localStorage.getItem('openai_api_key') || localStorage.getItem('kritiai_openai_api_key') || '';
-      const nvidiaKey = localStorage.getItem('nvidia_api_key') || localStorage.getItem('kritiai_nvidia_api_key') || '';
+      const groqKey = this.cleanKey(localStorage.getItem('groq_api_key') || localStorage.getItem('kritiai_groq_api_key') || '');
+      const grokKey = this.cleanKey(localStorage.getItem('grok_api_key') || localStorage.getItem('kritiai_grok_api_key') || '');
+      const geminiKey = this.cleanKey(localStorage.getItem('gemini_api_key') || localStorage.getItem('kritiai_gemini_api_key') || '');
+      const openaiKey = this.cleanKey(localStorage.getItem('openai_api_key') || localStorage.getItem('kritiai_openai_api_key') || '');
+      const nvidiaKey = this.cleanKey(localStorage.getItem('nvidia_api_key') || localStorage.getItem('kritiai_nvidia_api_key') || '');
 
       return {
         ...DEFAULT_SETTINGS,
         ...parsed,
-        groqApiKey: parsed.groqApiKey || groqKey || '',
-        geminiApiKey: parsed.geminiApiKey || geminiKey || '',
-        openaiApiKey: parsed.openaiApiKey || openaiKey || '',
-        nvidiaApiKey: parsed.nvidiaApiKey || nvidiaKey || '',
+        groqApiKey: this.cleanKey(parsed.groqApiKey || groqKey || ''),
+        grokApiKey: this.cleanKey(parsed.grokApiKey || grokKey || ''),
+        geminiApiKey: this.cleanKey(parsed.geminiApiKey || geminiKey || ''),
+        openaiApiKey: this.cleanKey(parsed.openaiApiKey || openaiKey || ''),
+        nvidiaApiKey: this.cleanKey(parsed.nvidiaApiKey || nvidiaKey || ''),
       };
     } catch {
       return DEFAULT_SETTINGS;
@@ -101,20 +109,34 @@ class KritiService {
 
       // Bulletproof direct persistence for API keys to prevent any browser data loss
       if (newSettings.groqApiKey !== undefined) {
-        localStorage.setItem('groq_api_key', newSettings.groqApiKey);
-        localStorage.setItem('kritiai_groq_api_key', newSettings.groqApiKey);
+        const clean = this.cleanKey(newSettings.groqApiKey);
+        localStorage.setItem('groq_api_key', clean);
+        localStorage.setItem('kritiai_groq_api_key', clean);
+        // If user entered an xAI Grok key in the Groq field, also save as grokApiKey!
+        if (clean.startsWith('xai-')) {
+          localStorage.setItem('grok_api_key', clean);
+          localStorage.setItem('kritiai_grok_api_key', clean);
+        }
+      }
+      if (newSettings.grokApiKey !== undefined) {
+        const clean = this.cleanKey(newSettings.grokApiKey);
+        localStorage.setItem('grok_api_key', clean);
+        localStorage.setItem('kritiai_grok_api_key', clean);
       }
       if (newSettings.geminiApiKey !== undefined) {
-        localStorage.setItem('gemini_api_key', newSettings.geminiApiKey);
-        localStorage.setItem('kritiai_gemini_api_key', newSettings.geminiApiKey);
+        const clean = this.cleanKey(newSettings.geminiApiKey);
+        localStorage.setItem('gemini_api_key', clean);
+        localStorage.setItem('kritiai_gemini_api_key', clean);
       }
       if (newSettings.openaiApiKey !== undefined) {
-        localStorage.setItem('openai_api_key', newSettings.openaiApiKey);
-        localStorage.setItem('kritiai_openai_api_key', newSettings.openaiApiKey);
+        const clean = this.cleanKey(newSettings.openaiApiKey);
+        localStorage.setItem('openai_api_key', clean);
+        localStorage.setItem('kritiai_openai_api_key', clean);
       }
       if (newSettings.nvidiaApiKey !== undefined) {
-        localStorage.setItem('nvidia_api_key', newSettings.nvidiaApiKey);
-        localStorage.setItem('kritiai_nvidia_api_key', newSettings.nvidiaApiKey);
+        const clean = this.cleanKey(newSettings.nvidiaApiKey);
+        localStorage.setItem('nvidia_api_key', clean);
+        localStorage.setItem('kritiai_nvidia_api_key', clean);
       }
     } catch (e) {
       console.warn('LocalStorage save error:', e);
@@ -128,27 +150,37 @@ class KritiService {
    */
   getApiKey(provider) {
     const settings = this.getSettings();
-    const directKey = localStorage.getItem(`${provider}_api_key`) || localStorage.getItem(`kritiai_${provider}_api_key`) || '';
+    const directKey = this.cleanKey(localStorage.getItem(`${provider}_api_key`) || localStorage.getItem(`kritiai_${provider}_api_key`) || '');
 
     if (provider === 'groq') {
-      return settings.groqApiKey || directKey ||
+      const k = settings.groqApiKey || directKey ||
              (typeof import.meta !== 'undefined' && (import.meta.env?.GROQ_API_KEY || import.meta.env?.VITE_GROQ_API_KEY)) ||
              (typeof process !== 'undefined' && (process.env?.GROQ_API_KEY || process.env?.VITE_GROQ_API_KEY)) || '';
+      return this.cleanKey(k);
+    }
+    if (provider === 'grok' || provider === 'xai') {
+      const k = settings.grokApiKey || directKey ||
+             (typeof import.meta !== 'undefined' && (import.meta.env?.GROK_API_KEY || import.meta.env?.VITE_GROK_API_KEY)) ||
+             (typeof process !== 'undefined' && (process.env?.GROK_API_KEY || process.env?.VITE_GROK_API_KEY)) || '';
+      return this.cleanKey(k);
     }
     if (provider === 'gemini') {
-      return settings.geminiApiKey || directKey ||
+      const k = settings.geminiApiKey || directKey ||
              (typeof import.meta !== 'undefined' && (import.meta.env?.GEMINI_API_KEY || import.meta.env?.VITE_GEMINI_API_KEY)) ||
              (typeof process !== 'undefined' && (process.env?.GEMINI_API_KEY || process.env?.VITE_GEMINI_API_KEY)) || '';
+      return this.cleanKey(k);
     }
     if (provider === 'openai') {
-      return settings.openaiApiKey || directKey ||
+      const k = settings.openaiApiKey || directKey ||
              (typeof import.meta !== 'undefined' && (import.meta.env?.OPENAI_API_KEY || import.meta.env?.VITE_OPENAI_API_KEY)) ||
              (typeof process !== 'undefined' && (process.env?.OPENAI_API_KEY || process.env?.VITE_OPENAI_API_KEY)) || '';
+      return this.cleanKey(k);
     }
     if (provider === 'nvidia') {
-      return settings.nvidiaApiKey || directKey ||
+      const k = settings.nvidiaApiKey || directKey ||
              (typeof import.meta !== 'undefined' && (import.meta.env?.NVIDIA_API_KEY || import.meta.env?.VITE_NVIDIA_API_KEY)) ||
              (typeof process !== 'undefined' && (process.env?.NVIDIA_API_KEY || process.env?.VITE_NVIDIA_API_KEY)) || '';
+      return this.cleanKey(k);
     }
     return '';
   }
@@ -162,19 +194,22 @@ class KritiService {
     }
     const settings = this.getSettings();
     const groqKey = this.getApiKey('groq');
+    const grokKey = this.getApiKey('grok');
     const geminiKey = this.getApiKey('gemini');
     const openaiKey = this.getApiKey('openai');
     const nvidiaKey = this.getApiKey('nvidia');
 
     // If preferred model is set in settings and has a key, use it
     if (settings.activeModel === 'groq-llama3' && groqKey) return 'groq-llama3';
+    if (settings.activeModel === 'grok-2' && (grokKey || (groqKey && groqKey.startsWith('xai-')))) return 'grok-2';
     if (settings.activeModel === 'gemini-2.0' && geminiKey) return 'gemini-2.0';
     if (settings.activeModel === 'gpt-4o' && openaiKey) return 'gpt-4o';
     if (settings.activeModel === 'nvidia-nim' && nvidiaKey) return 'nvidia-nim';
     if (settings.activeModel === 'ollama') return 'ollama';
 
-    // Auto-select provider with valid key: Groq -> Gemini -> OpenAI -> NVIDIA
-    if (groqKey) return 'groq-llama3';
+    // Auto-select provider with valid key: Groq -> Grok -> Gemini -> OpenAI -> NVIDIA
+    if (groqKey && !groqKey.startsWith('xai-')) return 'groq-llama3';
+    if (grokKey || (groqKey && groqKey.startsWith('xai-'))) return 'grok-2';
     if (geminiKey) return 'gemini-2.0';
     if (openaiKey) return 'gpt-4o';
     if (nvidiaKey) return 'nvidia-nim';
@@ -483,10 +518,10 @@ class KritiService {
       };
     }
 
-    // 5.5 Superpower Terminal & File/Folder Actions
-    const isTerminalCmd = /^(run command|execute command|run terminal|terminal|exec|powershell|cmd|run)\s+(.+)/i.exec(text);
+    // 5.5 Superpower Terminal & File/Folder Actions (only trigger on explicit command syntax)
+    const isTerminalCmd = /^(?:run\s+command|execute\s+command|run\s+terminal|exec\s+terminal|powershell|cmd)\s+(.+)/i.exec(text);
     if (isTerminalCmd && !lower.includes('schedule') && !lower.includes('email') && !lower.includes('meeting') && !lower.includes('write a')) {
-      const rawCmd = isTerminalCmd[2].trim().replace(/^`+|`+$/g, '');
+      const rawCmd = isTerminalCmd[1].trim().replace(/^`+|`+$/g, '');
       const termRes = await this.executeTerminal(rawCmd);
       const outText = termRes.stdout || termRes.stderr || '(Command executed with no standard output)';
       return {
@@ -514,8 +549,9 @@ class KritiService {
       };
     }
 
-    // 6. REAL MULTI-MODEL AI GENERATION (Groq / Gemini / OpenAI / NVIDIA / Ollama)
+    // 6. REAL MULTI-MODEL AI GENERATION (Groq / xAI Grok / Gemini / OpenAI / NVIDIA / Ollama)
     const groqKey = this.getApiKey('groq');
+    const grokKey = this.getApiKey('grok');
     const geminiKey = this.getApiKey('gemini');
     const openaiKey = this.getApiKey('openai');
     const nvidiaKey = this.getApiKey('nvidia');
@@ -529,25 +565,59 @@ class KritiService {
 ${memorySnippet}
 Always be helpful, precise, technical, and provide full working code blocks with syntax highlighting when asked about coding, bugs, or scripts.`;
 
-    // Try selected model first
-    if (model === 'groq-llama3' || (!geminiKey && groqKey)) {
+    // 1) xAI Grok
+    if (model === 'grok-2' || (grokKey && !groqKey)) {
+      const effectiveKey = grokKey || (groqKey && groqKey.startsWith('xai-') ? groqKey : null);
+      if (effectiveKey) {
+        try {
+          const res = await this.callGrokApi(text, effectiveKey, systemPrompt);
+          if (res) return res;
+        } catch (e) {
+          console.warn('xAI Grok API error:', e);
+          if (groqKey && !groqKey.startsWith('xai-')) {
+            return await this.callGroqApi(text, groqKey, false, systemPrompt);
+          }
+          return {
+            reply: `⚠️ **xAI Grok API Error:** ${e.message}\n\nPlease check your key in **Settings ➔ AI Models** or get a new key at [console.x.ai](https://console.x.ai).`,
+            logs: ['xAI Grok call failed', e.message],
+            requiresClarification: false
+          };
+        }
+      } else {
+        return this.missingKeyResponse('xAI Grok (Grok 2)', 'grokApiKey', 'https://console.x.ai');
+      }
+    }
+
+    // 2) Groq LPUs (Ultra-fast Llama 3.3 / Llama 3.1)
+    if (model === 'groq-llama3' || (!geminiKey && !grokKey && groqKey)) {
+      // Auto-detect if user entered an xAI key into groqKey
+      if (groqKey && groqKey.startsWith('xai-')) {
+        return await this.callGrokApi(text, groqKey, systemPrompt);
+      }
+
       if (groqKey) {
         try {
           const res = await this.callGroqApi(text, groqKey, false, systemPrompt);
           if (res) return res;
         } catch (e) {
           console.warn('Groq API call error:', e);
+          // If Groq fails and grokKey or geminiKey is available, smart fallback
+          if (grokKey) return await this.callGrokApi(text, grokKey, systemPrompt);
+          if (geminiKey) return await this.callGeminiApi(text, geminiKey, systemPrompt);
           return {
-            reply: `⚠️ **Groq API Error:** ${e.message}\n\nPlease verify your Groq API key in **Settings ➔ AI Models / System Settings**.`,
+            reply: `⚠️ **Groq API Error:** ${e.message}\n\nPlease verify your Groq API key in **Settings ➔ AI Models** (get free key at [console.groq.com/keys](https://console.groq.com/keys)).`,
             logs: ['Groq LPU call failed', e.message],
             requiresClarification: false
           };
         }
+      } else if (grokKey) {
+        return await this.callGrokApi(text, grokKey, systemPrompt);
       } else {
         return this.missingKeyResponse('Groq LPUs (Llama 3.3 70B)', 'groqApiKey', 'https://console.groq.com/keys');
       }
     }
 
+    // 3) Google Gemini 2.0 Flash
     if (model === 'gemini-2.0') {
       if (geminiKey) {
         try {
@@ -555,19 +625,19 @@ Always be helpful, precise, technical, and provide full working code blocks with
           if (res) return res;
         } catch (e) {
           console.warn('Gemini API call error:', e);
-          if (groqKey) {
-            // Smart fallback to Groq!
-            return await this.callGroqApi(text, groqKey, false, systemPrompt);
-          }
+          if (groqKey) return await this.callGroqApi(text, groqKey, false, systemPrompt);
+          if (grokKey) return await this.callGrokApi(text, grokKey, systemPrompt);
         }
       } else if (groqKey) {
-        // Smart fallback to Groq if Gemini key is missing but Groq is set
         return await this.callGroqApi(text, groqKey, false, systemPrompt);
+      } else if (grokKey) {
+        return await this.callGrokApi(text, grokKey, systemPrompt);
       } else {
         return this.missingKeyResponse('Google Gemini 2.0 Flash', 'geminiApiKey', 'https://aistudio.google.com');
       }
     }
 
+    // 4) OpenAI GPT-4o
     if (model === 'gpt-4o') {
       if (openaiKey) {
         try {
@@ -576,14 +646,18 @@ Always be helpful, precise, technical, and provide full working code blocks with
         } catch (e) {
           console.warn('OpenAI API call error:', e);
           if (groqKey) return await this.callGroqApi(text, groqKey, false, systemPrompt);
+          if (grokKey) return await this.callGrokApi(text, grokKey, systemPrompt);
         }
       } else if (groqKey) {
         return await this.callGroqApi(text, groqKey, false, systemPrompt);
+      } else if (grokKey) {
+        return await this.callGrokApi(text, grokKey, systemPrompt);
       } else {
         return this.missingKeyResponse('OpenAI GPT-4o', 'openaiApiKey', 'https://platform.openai.com/api-keys');
       }
     }
 
+    // 5) NVIDIA NIM
     if (model === 'nvidia-nim') {
       if (nvidiaKey) {
         try {
@@ -600,14 +674,16 @@ Always be helpful, precise, technical, and provide full working code blocks with
       }
     }
 
+    // 6) Local Ollama (Offline)
     if (model === 'ollama') {
       try {
         const res = await this.callOllamaApi(text, settings.ollamaUrl, settings.ollamaModel, systemPrompt);
         if (res) return res;
       } catch (e) {
         if (groqKey) return await this.callGroqApi(text, groqKey, false, systemPrompt);
+        if (grokKey) return await this.callGrokApi(text, grokKey, systemPrompt);
         return {
-          reply: `⚠️ **Local Ollama Not Reachable at ${settings.ollamaUrl}**\n\nPlease ensure Ollama is running (\`ollama run ${settings.ollamaModel}\`).\n\nYou can also enter your Groq API key in **Settings ➔ AI Models** for instant cloud inference.`,
+          reply: `⚠️ **Local Ollama Not Reachable at ${settings.ollamaUrl}**\n\nPlease ensure Ollama is running (\`ollama run ${settings.ollamaModel}\`).\n\nYou can also enter your Groq or Grok API key in **Settings ➔ AI Models** for instant cloud inference.`,
           logs: ['Ollama connection refused', `URL: ${settings.ollamaUrl}`],
           requiresClarification: false
         };
@@ -657,49 +733,179 @@ Always be helpful, precise, technical, and provide full working code blocks with
   }
 
   /**
-   * Real Groq API client supporting fast streaming and JSON modes
+   * Real Groq API client supporting multi-model fallback and serverless proxy
    */
   async callGroqApi(prompt, apiKey, jsonMode = false, systemPrompt = null) {
+    const cleanKey = this.cleanKey(apiKey);
+    if (!cleanKey) throw new Error('Groq API Key is empty.');
+
+    // Transparently forward xAI Grok keys
+    if (cleanKey.startsWith('xai-')) {
+      return await this.callGrokApi(prompt, cleanKey, systemPrompt);
+    }
+
     const messages = [];
     if (systemPrompt) {
       messages.push({ role: 'system', content: systemPrompt });
     }
     messages.push({ role: 'user', content: prompt });
 
-    const payload = {
-      model: 'llama-3.3-70b-versatile',
-      messages: messages,
-      temperature: 0.3,
-      max_tokens: 2048
-    };
+    const candidateModels = [
+      'llama-3.3-70b-versatile',
+      'llama-3.1-8b-instant',
+      'llama3-70b-8192',
+      'llama3-8b-8192',
+      'mixtral-8x7b-32768'
+    ];
 
-    if (jsonMode) {
-      payload.response_format = { type: 'json_object' };
+    let lastError = null;
+
+    for (const modelCandidate of candidateModels) {
+      try {
+        const payload = {
+          model: modelCandidate,
+          messages: messages,
+          temperature: 0.3,
+          max_tokens: 2048
+        };
+        if (jsonMode) {
+          payload.response_format = { type: 'json_object' };
+        }
+
+        let res = null;
+
+        // Try serverless API proxy first to guarantee zero CORS and zero browser extension blocking
+        try {
+          res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: 'groq', apiKey: cleanKey, payload })
+          });
+        } catch {
+          res = null;
+        }
+
+        // Direct fetch fallback if serverless proxy not available (e.g. desktop/local)
+        if (!res || res.status === 404 || res.status === 405) {
+          res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${cleanKey}`
+            },
+            body: JSON.stringify(payload)
+          });
+        }
+
+        if (res.ok) {
+          const data = await res.json();
+          return {
+            reply: data.choices?.[0]?.message?.content || '',
+            logs: [`Model: Groq LPU (${modelCandidate})`, 'Inference: Sub-Second Ultra-Fast Groq LPUs'],
+            requiresClarification: false
+          };
+        }
+
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.error?.message || `Groq API HTTP ${res.status}`;
+        lastError = new Error(errMsg);
+
+        // If invalid key, stop immediately so user is prompted with proper message
+        if (res.status === 401) {
+          throw lastError;
+        }
+
+        console.warn(`Groq candidate model ${modelCandidate} failed (${errMsg}), testing next fallback...`);
+      } catch (err) {
+        if (err.message && (err.message.includes('Invalid API Key') || err.message.includes('401'))) {
+          throw err;
+        }
+        lastError = err;
+      }
     }
 
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey.trim()}`
-      },
-      body: JSON.stringify(payload)
-    });
+    throw lastError || new Error('All Groq candidate models failed to respond.');
+  }
 
-    if (res.ok) {
-      const data = await res.json();
-      return {
-        reply: data.choices?.[0]?.message?.content || '',
-        logs: ['Model: Groq LPU (llama-3.3-70b-versatile)', 'Inference: Sub-Second Ultra-Fast Groq LPUs'],
-        requiresClarification: false
-      };
+  /**
+   * Real xAI Grok API client (grok-2-latest, grok-2, grok-beta)
+   */
+  async callGrokApi(prompt, apiKey, systemPrompt = null) {
+    const cleanKey = this.cleanKey(apiKey);
+    if (!cleanKey) throw new Error('xAI Grok API Key is empty.');
+
+    const messages = [];
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt });
+    }
+    messages.push({ role: 'user', content: prompt });
+
+    const candidateModels = ['grok-2-latest', 'grok-2', 'grok-beta'];
+    let lastError = null;
+
+    for (const modelCandidate of candidateModels) {
+      try {
+        const payload = {
+          model: modelCandidate,
+          messages: messages,
+          temperature: 0.3,
+          max_tokens: 2048
+        };
+
+        let res = null;
+
+        // Try serverless API proxy first
+        try {
+          res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: 'grok', apiKey: cleanKey, payload })
+          });
+        } catch {
+          res = null;
+        }
+
+        // Direct fetch fallback
+        if (!res || res.status === 404 || res.status === 405) {
+          res = await fetch('https://api.x.ai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${cleanKey}`
+            },
+            body: JSON.stringify(payload)
+          });
+        }
+
+        if (res.ok) {
+          const data = await res.json();
+          return {
+            reply: data.choices?.[0]?.message?.content || '',
+            logs: [`Model: xAI Grok (${modelCandidate})`, 'Inference: xAI Cloud'],
+            requiresClarification: false
+          };
+        }
+
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.error?.message || `xAI Grok API HTTP ${res.status}`;
+        lastError = new Error(errMsg);
+
+        if (res.status === 401) {
+          throw lastError;
+        }
+      } catch (err) {
+        if (err.message && (err.message.includes('Incorrect API key') || err.message.includes('401'))) {
+          throw err;
+        }
+        lastError = err;
+      }
     }
 
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.error?.message || `Groq API HTTP ${res.status}`);
+    throw lastError || new Error('All xAI Grok models failed to respond.');
   }
 
   async callGeminiApi(prompt, apiKey, systemPrompt = null) {
+    const cleanKey = this.cleanKey(apiKey);
     const contents = [];
     if (systemPrompt) {
       contents.push({ role: 'user', parts: [{ text: systemPrompt }] });
@@ -707,7 +913,7 @@ Always be helpful, precise, technical, and provide full working code blocks with
     }
     contents.push({ role: 'user', parts: [{ text: prompt }] });
 
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey.trim()}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${cleanKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: contents })
@@ -726,6 +932,7 @@ Always be helpful, precise, technical, and provide full working code blocks with
   }
 
   async callOpenAiApi(prompt, apiKey, systemPrompt = null) {
+    const cleanKey = this.cleanKey(apiKey);
     const messages = [];
     if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
     messages.push({ role: 'user', content: prompt });
@@ -734,7 +941,7 @@ Always be helpful, precise, technical, and provide full working code blocks with
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey.trim()}`
+        'Authorization': `Bearer ${cleanKey}`
       },
       body: JSON.stringify({
         model: 'gpt-4o',
@@ -755,6 +962,7 @@ Always be helpful, precise, technical, and provide full working code blocks with
   }
 
   async callNvidiaNim(prompt, apiKey, systemPrompt = null) {
+    const cleanKey = this.cleanKey(apiKey);
     const messages = [];
     if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
     messages.push({ role: 'user', content: prompt });
@@ -763,7 +971,7 @@ Always be helpful, precise, technical, and provide full working code blocks with
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey.trim()}`
+        'Authorization': `Bearer ${cleanKey}`
       },
       body: JSON.stringify({
         model: 'meta/llama-3.1-70b-instruct',
@@ -807,40 +1015,97 @@ Always be helpful, precise, technical, and provide full working code blocks with
   }
 
   async testProviderKey(provider, apiKey) {
-    if (!apiKey || !apiKey.trim()) {
+    const cleanKey = this.cleanKey(apiKey);
+    if (!cleanKey) {
       return { success: false, message: 'Please enter a key before testing.' };
     }
+
+    // Try serverless test endpoint first
     try {
-      if (provider === 'groq') {
-        const res = await fetch('https://api.groq.com/openai/v1/models', {
-          headers: { 'Authorization': `Bearer ${apiKey.trim()}` }
-        });
-        if (res.ok) return { success: true, message: 'Groq API Key Verified! Llama 3.3 70B Active.' };
-        const data = await res.json().catch(() => ({}));
-        return { success: false, message: data.error?.message || 'Invalid Groq API key.' };
+      const proxyRes = await fetch('/api/test-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, apiKey: cleanKey })
+      });
+      if (proxyRes.ok) {
+        const data = await proxyRes.json();
+        if (data.provider === 'grok') {
+          this.saveSettings({ grokApiKey: cleanKey, activeModel: 'grok-2' });
+        } else if (data.provider === 'groq') {
+          this.saveSettings({ groqApiKey: cleanKey, activeModel: 'groq-llama3' });
+        }
+        return data;
       }
+    } catch {}
+
+    // Direct fetch test
+    try {
+      // 1. xAI Grok detection (starts with xai- or explicit grok)
+      if (cleanKey.startsWith('xai-') || provider === 'grok') {
+        const res = await fetch('https://api.x.ai/v1/models', {
+          headers: { 'Authorization': `Bearer ${cleanKey}` }
+        });
+        if (res.ok) {
+          this.saveSettings({ grokApiKey: cleanKey, activeModel: 'grok-2' });
+          return { success: true, message: 'xAI Grok API Key Verified! Grok 2 Inference is Active.', provider: 'grok' };
+        }
+        const data = await res.json().catch(() => ({}));
+        return { success: false, message: data.error?.message || 'Invalid xAI Grok API key.' };
+      }
+
+      // 2. Groq LPU
+      if (provider === 'groq' || cleanKey.startsWith('gsk_')) {
+        const res = await fetch('https://api.groq.com/openai/v1/models', {
+          headers: { 'Authorization': `Bearer ${cleanKey}` }
+        });
+        if (res.ok) {
+          this.saveSettings({ groqApiKey: cleanKey, activeModel: 'groq-llama3' });
+          return { success: true, message: 'Groq API Key Verified! Ultra-Fast LPUs Active.', provider: 'groq' };
+        }
+
+        // If Groq fails with 401, check if user inadvertently supplied an xAI key
+        try {
+          const xRes = await fetch('https://api.x.ai/v1/models', {
+            headers: { 'Authorization': `Bearer ${cleanKey}` }
+          });
+          if (xRes.ok) {
+            this.saveSettings({ grokApiKey: cleanKey, activeModel: 'grok-2' });
+            return { success: true, message: 'Auto-detected valid xAI Grok API Key! Grok 2 is active.', provider: 'grok' };
+          }
+        } catch {}
+
+        const data = await res.json().catch(() => ({}));
+        return { success: false, message: data.error?.message || 'Invalid Groq API key (starts with gsk_ from console.groq.com).' };
+      }
+
+      // 3. Google Gemini
       if (provider === 'gemini') {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`);
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${cleanKey}`);
         if (res.ok) return { success: true, message: 'Gemini API Key Verified Successfully!' };
         const data = await res.json().catch(() => ({}));
         return { success: false, message: data.error?.message || 'Invalid Gemini API key.' };
       }
+
+      // 4. OpenAI
       if (provider === 'openai') {
         const res = await fetch('https://api.openai.com/v1/models', {
-          headers: { 'Authorization': `Bearer ${apiKey.trim()}` }
+          headers: { 'Authorization': `Bearer ${cleanKey}` }
         });
         if (res.ok) return { success: true, message: 'OpenAI API Key Verified Successfully!' };
         const data = await res.json().catch(() => ({}));
         return { success: false, message: data.error?.message || 'Invalid OpenAI API key.' };
       }
+
+      // 5. NVIDIA NIM
       if (provider === 'nvidia') {
         const res = await fetch('https://integrate.api.nvidia.com/v1/models', {
-          headers: { 'Authorization': `Bearer ${apiKey.trim()}` }
+          headers: { 'Authorization': `Bearer ${cleanKey}` }
         });
         if (res.ok) return { success: true, message: 'NVIDIA NIM API Key Verified Successfully!' };
         const data = await res.json().catch(() => ({}));
         return { success: false, message: data.error?.message || 'Invalid NVIDIA NIM API key.' };
       }
+
       return { success: false, message: 'Unknown provider.' };
     } catch (e) {
       return { success: false, message: `Connection test error: ${e.message}` };
