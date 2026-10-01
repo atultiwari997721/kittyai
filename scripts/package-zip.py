@@ -4,6 +4,7 @@ from pathlib import Path
 
 files_to_zip = [
     ("public/downloads/KritiAI.exe", "KritiAI.exe"),
+    ("public/downloads/KritiAI.vbs", "KritiAI.vbs"),
     ("public/downloads/KritiAI-Launcher.bat", "KritiAI-Launcher.bat"),
     ("public/downloads/KritiAI-Setup.bat", "KritiAI-Setup.bat"),
     ("public/downloads/Install-KritiAI.ps1", "Install-KritiAI.ps1"),

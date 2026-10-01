@@ -9,12 +9,21 @@ Features:
 - Autonomous script execution (Python, Node, PowerShell, etc.)
 - 6-Digit Alphanumeric Bilateral Pairing with Website
 - Persistent auto-reconnection across sessions
-- Native Windows Edge WebView2 window via pywebview
+- Dual Engine: FastAPI + Built-in Pure Python HTTP Fallback (Zero external pip dependencies required)
 - Built-in static file server for React frontend
 """
 
 import os
 import sys
+
+# Safety guards for pythonw.exe or headless execution
+if sys.stdin is None:
+    sys.stdin = open(os.devnull, "r")
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
+
 import json
 import time
 import socket
@@ -22,15 +31,9 @@ import logging
 import asyncio
 import subprocess
 import threading
+import mimetypes
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-
-import uvicorn
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -46,7 +49,6 @@ if not DIST_DIR.exists():
     DIST_DIR = Path.cwd() / "dist"
 CONFIG_FILE = APP_DIR / "desktop_config.json"
 
-# Default workspace directory is the app folder or user's project folder
 DEFAULT_WORKSPACE = str(PROJECT_ROOT)
 
 def load_config() -> Dict[str, Any]:
@@ -74,46 +76,9 @@ def save_config(cfg: Dict[str, Any]):
 
 config = load_config()
 
-# FastAPI application
-app = FastAPI(title="KritiAI Desktop Engine", version="2.5.0")
+# ----------------- CORE ENGINE FUNCTIONS -----------------
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ----------------- PYDANTIC MODELS -----------------
-class TerminalRequest(BaseModel):
-    command: str
-    cwd: Optional[str] = None
-    timeout: Optional[int] = 30
-
-class WorkspaceSetRequest(BaseModel):
-    path: str
-
-class FileCreateRequest(BaseModel):
-    path: str
-    content: str
-    overwrite: Optional[bool] = True
-
-class FolderCreateRequest(BaseModel):
-    path: str
-
-class ScriptRunRequest(BaseModel):
-    filePath: str
-    runtime: Optional[str] = "auto" # "python", "node", "powershell", "cmd"
-
-class PairVerifyRequest(BaseModel):
-    code: str
-    websiteUrl: Optional[str] = "https://kritiai.vercel.app"
-
-# ----------------- DESKTOP API ENDPOINTS -----------------
-
-@app.get("/api/health")
-async def health_check():
+def core_health_check() -> Dict[str, Any]:
     return {
         "status": "online",
         "app": "KritiAI Desktop Kernel",
@@ -124,9 +89,7 @@ async def health_check():
         "pairCode": config.get("pairCode")
     }
 
-# 1. WORKSPACE FOLDER SELECTOR
-@app.get("/api/workspace")
-async def get_workspace():
+def core_get_workspace() -> Dict[str, Any]:
     ws = config.get("workspaceDir", DEFAULT_WORKSPACE)
     if not os.path.exists(ws):
         os.makedirs(ws, exist_ok=True)
@@ -137,40 +100,34 @@ async def get_workspace():
         "exists": os.path.exists(ws)
     }
 
-@app.post("/api/workspace")
-async def set_workspace(req: WorkspaceSetRequest):
-    new_path = os.path.abspath(req.path)
-    try:
-        os.makedirs(new_path, exist_ok=True)
-        config["workspaceDir"] = new_path
-        save_config(config)
-        return {
-            "success": True,
-            "workspaceDir": new_path,
-            "message": f"Active workspace folder set to: {new_path}"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to set workspace directory: {str(e)}")
+def core_set_workspace(path: str) -> Dict[str, Any]:
+    new_path = os.path.abspath(path)
+    os.makedirs(new_path, exist_ok=True)
+    config["workspaceDir"] = new_path
+    save_config(config)
+    return {
+        "success": True,
+        "workspaceDir": new_path,
+        "message": f"Active workspace folder set to: {new_path}"
+    }
 
-# 2. REAL POWERSHELL / CMD TERMINAL RUNNER
-@app.post("/api/terminal/run")
-async def run_terminal(req: TerminalRequest):
-    cmd = req.command.strip()
+def core_run_terminal(command: str, cwd: Optional[str] = None, timeout: int = 30) -> Dict[str, Any]:
+    cmd = (command or "").strip()
     if not cmd:
         return {"success": False, "error": "Empty command."}
 
-    cwd = req.cwd or config.get("workspaceDir", DEFAULT_WORKSPACE)
-    if not os.path.exists(cwd):
-        cwd = str(PROJECT_ROOT)
+    work_dir = cwd or config.get("workspaceDir", DEFAULT_WORKSPACE)
+    if not os.path.exists(work_dir):
+        work_dir = str(PROJECT_ROOT)
 
     start_time = time.time()
     try:
-        # Use PowerShell on Windows for modern command execution
+        # PowerShell on Windows for full system control and terminal capabilities
         shell_cmd = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd] if sys.platform == "win32" else [cmd]
 
         proc = subprocess.Popen(
             shell_cmd,
-            cwd=cwd,
+            cwd=work_dir,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -178,7 +135,7 @@ async def run_terminal(req: TerminalRequest):
         )
 
         try:
-            stdout, stderr = proc.communicate(timeout=req.timeout or 30)
+            stdout, stderr = proc.communicate(timeout=timeout or 30)
             elapsed_ms = int((time.time() - start_time) * 1000)
             return {
                 "success": proc.returncode == 0,
@@ -186,7 +143,7 @@ async def run_terminal(req: TerminalRequest):
                 "stdout": stdout,
                 "stderr": stderr,
                 "returncode": proc.returncode,
-                "cwd": cwd,
+                "cwd": work_dir,
                 "elapsedMs": elapsed_ms
             }
         except subprocess.TimeoutExpired:
@@ -195,9 +152,9 @@ async def run_terminal(req: TerminalRequest):
                 "success": False,
                 "command": cmd,
                 "stdout": "",
-                "stderr": f"Command timed out after {req.timeout} seconds.",
+                "stderr": f"Command timed out after {timeout} seconds.",
                 "returncode": -1,
-                "cwd": cwd,
+                "cwd": work_dir,
                 "elapsedMs": int((time.time() - start_time) * 1000)
             }
     except Exception as e:
@@ -207,23 +164,21 @@ async def run_terminal(req: TerminalRequest):
             "stdout": "",
             "stderr": f"Terminal error: {str(e)}",
             "returncode": 1,
-            "cwd": cwd,
+            "cwd": work_dir,
             "elapsedMs": int((time.time() - start_time) * 1000)
         }
 
-# 3. FILE & FOLDER SYSTEM IN ACTIVE WORKSPACE
-@app.get("/api/fs/list")
-async def list_workspace_files(subpath: Optional[str] = ""):
+def core_list_files(subpath: str = "") -> Dict[str, Any]:
     ws = Path(config.get("workspaceDir", DEFAULT_WORKSPACE))
     target_dir = ws / subpath if subpath else ws
     if not target_dir.exists():
         target_dir.mkdir(parents=True, exist_ok=True)
 
     entries = []
-    try:
-        for item in sorted(target_dir.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
-            if item.name.startswith(".") or item.name in ["node_modules", "__pycache__", "dist"]:
-                continue
+    for item in sorted(target_dir.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+        if item.name.startswith(".") or item.name in ["node_modules", "__pycache__", "dist"]:
+            continue
+        try:
             stat = item.stat()
             entries.append({
                 "name": item.name,
@@ -232,93 +187,76 @@ async def list_workspace_files(subpath: Optional[str] = ""):
                 "sizeBytes": stat.st_size if not item.is_dir() else 0,
                 "modified": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stat.st_mtime))
             })
-        return {
-            "success": True,
-            "workspaceDir": str(ws),
-            "currentSubdir": subpath or "",
-            "entries": entries
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        except Exception:
+            pass
 
-@app.post("/api/fs/create-file")
-async def create_file(req: FileCreateRequest):
+    return {
+        "success": True,
+        "workspaceDir": str(ws),
+        "currentSubdir": subpath or "",
+        "entries": entries
+    }
+
+def core_create_file(path: str, content: str) -> Dict[str, Any]:
     ws = Path(config.get("workspaceDir", DEFAULT_WORKSPACE))
-    file_path = ws / req.path
+    file_path = ws / path
     file_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    return {
+        "success": True,
+        "path": str(file_path),
+        "relativePath": str(file_path.relative_to(ws)),
+        "sizeBytes": len(content.encode("utf-8")),
+        "message": f"File successfully created: {file_path.name}"
+    }
 
-    try:
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(req.content)
-        return {
-            "success": True,
-            "path": str(file_path),
-            "relativePath": str(file_path.relative_to(ws)),
-            "sizeBytes": len(req.content.encode("utf-8")),
-            "message": f"File successfully created: {file_path.name}"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/fs/create-folder")
-async def create_folder(req: FolderCreateRequest):
+def core_create_folder(path: str) -> Dict[str, Any]:
     ws = Path(config.get("workspaceDir", DEFAULT_WORKSPACE))
-    folder_path = ws / req.path
-    try:
-        folder_path.mkdir(parents=True, exist_ok=True)
-        return {
-            "success": True,
-            "path": str(folder_path),
-            "relativePath": str(folder_path.relative_to(ws)),
-            "message": f"Folder created: {folder_path.name}"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    folder_path = ws / path
+    folder_path.mkdir(parents=True, exist_ok=True)
+    return {
+        "success": True,
+        "path": str(folder_path),
+        "relativePath": str(folder_path.relative_to(ws)),
+        "message": f"Folder created: {folder_path.name}"
+    }
 
-@app.get("/api/fs/read-file")
-async def read_file(path: str):
+def core_read_file(path: str) -> Dict[str, Any]:
     ws = Path(config.get("workspaceDir", DEFAULT_WORKSPACE))
     file_path = ws / path
     if not file_path.exists() or file_path.is_dir():
-        raise HTTPException(status_code=404, detail="File not found")
-    try:
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
-        return {
-            "success": True,
-            "path": str(file_path),
-            "content": content,
-            "sizeBytes": len(content)
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise FileNotFoundError("File not found")
+    with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+        content = f.read()
+    return {
+        "success": True,
+        "path": str(file_path),
+        "content": content,
+        "sizeBytes": len(content)
+    }
 
-@app.post("/api/fs/run-script")
-async def run_script(req: ScriptRunRequest):
+def core_run_script(file_path_str: str, runtime: str = "auto") -> Dict[str, Any]:
     ws = Path(config.get("workspaceDir", DEFAULT_WORKSPACE))
-    target_file = ws / req.filePath
+    target_file = ws / file_path_str
     if not target_file.exists():
-        raise HTTPException(status_code=404, detail=f"Script file '{req.filePath}' not found in workspace.")
+        raise FileNotFoundError(f"Script file '{file_path_str}' not found in workspace.")
 
     ext = target_file.suffix.lower()
-    cmd = ""
-    if req.runtime == "python" or ext == ".py":
+    if runtime == "python" or ext == ".py":
         cmd = f'python "{target_file.name}"'
-    elif req.runtime == "node" or ext in [".js", ".mjs", ".ts"]:
+    elif runtime == "node" or ext in [".js", ".mjs", ".ts"]:
         cmd = f'node "{target_file.name}"'
-    elif req.runtime == "powershell" or ext == ".ps1":
+    elif runtime == "powershell" or ext == ".ps1":
         cmd = f'powershell.exe -ExecutionPolicy Bypass -File "{target_file.name}"'
-    elif req.runtime == "cmd" or ext in [".bat", ".cmd"]:
+    elif runtime == "cmd" or ext in [".bat", ".cmd"]:
         cmd = f'"{target_file.name}"'
     else:
         cmd = f'python "{target_file.name}"'
 
-    term_req = TerminalRequest(command=cmd, cwd=str(target_file.parent), timeout=60)
-    return await run_terminal(term_req)
+    return core_run_terminal(command=cmd, cwd=str(target_file.parent), timeout=60)
 
-# 4. BILATERAL 6-DIGIT PAIRING (WEBSITE <-> DESKTOP APP)
-@app.get("/api/pair/state")
-async def get_pair_state():
+def core_get_pair_state() -> Dict[str, Any]:
     return {
         "paired": config.get("paired", False),
         "code": config.get("pairCode"),
@@ -327,13 +265,12 @@ async def get_pair_state():
         "lastConnected": config.get("lastConnected")
     }
 
-@app.post("/api/pair/connect")
-async def pair_with_website(req: PairVerifyRequest):
-    clean_code = req.code.strip().upper()
+def core_pair_connect(code: str, website_url: str = "https://kritiai.vercel.app") -> Dict[str, Any]:
+    clean_code = (code or "").strip().upper()
     import urllib.request
-    
-    website_url = req.websiteUrl.rstrip("/")
-    api_url = f"{website_url}/api/pair"
+
+    clean_website = (website_url or "https://kritiai.vercel.app").rstrip("/")
+    api_url = f"{clean_website}/api/pair"
 
     payload = json.dumps({
         "action": "verify",
@@ -343,27 +280,23 @@ async def pair_with_website(req: PairVerifyRequest):
     }).encode("utf-8")
 
     try:
-        req_obj = urllib.request.Request(
-            api_url,
-            data=payload,
-            headers={"Content-Type": "application/json"}
-        )
+        req_obj = urllib.request.Request(api_url, data=payload, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req_obj, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             if data.get("success"):
                 config["paired"] = True
                 config["pairCode"] = clean_code
                 config["deviceToken"] = data.get("deviceToken")
-                config["websiteUrl"] = website_url
+                config["websiteUrl"] = clean_website
                 config["lastConnected"] = time.strftime("%Y-%m-%d %H:%M:%S")
                 save_config(config)
                 return {
                     "success": True,
-                    "message": f"Successfully paired with Website ({website_url})! Code: {clean_code}",
+                    "message": f"Successfully paired with Website ({clean_website})! Code: {clean_code}",
                     "state": config
                 }
             else:
-                return {"success": False, "message": data.get("message", "Pairing failed.")}
+                return {"success": False, "message": data.get("message", "Pairing code verification failed.")}
     except Exception as e:
         # Fallback local pairing
         config["paired"] = True
@@ -377,58 +310,51 @@ async def pair_with_website(req: PairVerifyRequest):
             "state": config
         }
 
-@app.post("/api/pair/unpair")
-async def unpair_app():
+def core_pair_unpair() -> Dict[str, Any]:
     config["paired"] = False
     config["pairCode"] = None
     config["deviceToken"] = None
     save_config(config)
-    return {"success": True, "message": "App unpaired from website."}
+    return {"success": True, "message": "Desktop app unpaired successfully."}
 
-# 4.5 CHAT PROXY WITH ZERO-CORS & FREE AI GATEWAY FALLBACK
-class ChatProxyRequest(BaseModel):
-    provider: Optional[str] = "groq"
-    apiKey: Optional[str] = ""
-    payload: Dict[str, Any]
-
-@app.post("/api/chat")
-async def chat_proxy(req: ChatProxyRequest):
+def core_chat_proxy(provider: str, api_key: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     import urllib.request
-    clean_key = (req.apiKey or "").strip().strip("\"'").strip()
+    clean_key = (api_key or "").strip().strip("\"'").strip()
     if not clean_key:
         clean_key = "gsk_TOMZuMkhgyOpPwXeUsqEWGdyb3FYGywpI8gaU9KNZ51iSfzHLGcYy"
 
-    payload = req.payload or {}
+    payload_data = payload or {}
     target_url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {clean_key}",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
 
-    if req.provider == "gemini":
-        model = payload.get("model", "gemini-1.5-flash")
+    if provider == "gemini":
+        model = payload_data.get("model", "gemini-1.5-flash")
         target_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
         headers = {"Content-Type": "application/json"}
-    elif req.provider == "grok" or clean_key.startswith("xai-"):
+    elif provider == "grok" or clean_key.startswith("xai-"):
         target_url = "https://api.x.ai/v1/chat/completions"
 
     try:
-        req_obj = urllib.request.Request(target_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+        req_obj = urllib.request.Request(target_url, data=json.dumps(payload_data).encode("utf-8"), headers=headers)
         with urllib.request.urlopen(req_obj, timeout=12) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             if data.get("choices"):
                 return data
     except Exception as e:
-        logger.warning(f"Desktop chat upstream error: {e}, falling back to free AI gateway...")
+        logger.warning(f"Upstream chat error ({e}), activating free AI gateway fallback...")
 
+    # Guaranteed Free AI Gateway Fallback (Zero Setup)
     try:
         free_url = "https://text.pollinations.ai/openai/chat/completions"
         free_payload = {
             "model": "openai-fast",
-            "messages": payload.get("messages", [{"role": "user", "content": "Hello"}]),
-            "max_tokens": payload.get("max_tokens", 2048),
-            "temperature": payload.get("temperature", 0.3)
+            "messages": payload_data.get("messages", [{"role": "user", "content": "Hello"}]),
+            "max_tokens": payload_data.get("max_tokens", 2048),
+            "temperature": payload_data.get("temperature", 0.3)
         }
         free_req = urllib.request.Request(
             free_url,
@@ -438,21 +364,7 @@ async def chat_proxy(req: ChatProxyRequest):
         with urllib.request.urlopen(free_req, timeout=15) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except Exception as free_e:
-        raise HTTPException(status_code=500, detail=f"Chat execution failed: {str(free_e)}")
-
-# 5. MOUNT REACT FRONTEND (STATIC ASSETS)
-if DIST_DIR.exists():
-    app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="assets")
-
-    @app.get("/{full_path:path}")
-    async def serve_frontend(full_path: str):
-        file_path = DIST_DIR / full_path
-        if file_path.exists() and file_path.is_file():
-            return FileResponse(file_path)
-        index_file = DIST_DIR / "index.html"
-        if index_file.exists():
-            return FileResponse(index_file)
-        return JSONResponse({"status": "KritiAI Backend Online. dist/index.html not yet built."}, status_code=200)
+        raise RuntimeError(f"Chat request failed: {str(free_e)}")
 
 # Background polling for remote website commands when paired
 def poll_website_commands():
@@ -466,7 +378,7 @@ def poll_website_commands():
                     "action": "poll_commands",
                     "deviceToken": config.get("deviceToken")
                 }).encode("utf-8")
-                
+
                 req_obj = urllib.request.Request(
                     poll_url,
                     data=payload,
@@ -480,10 +392,10 @@ def poll_website_commands():
                         cmd_str = cmd_item.get("command")
                         cwd = cmd_item.get("cwd") or config.get("workspaceDir", DEFAULT_WORKSPACE)
 
-                        # Execute locally
-                        res = asyncio.run(run_terminal(TerminalRequest(command=cmd_str, cwd=cwd)))
+                        # Execute locally via core runner
+                        res = core_run_terminal(command=cmd_str, cwd=cwd)
 
-                        # Post result back
+                        # Post result back to website
                         post_payload = json.dumps({
                             "action": "post_result",
                             "commandId": cmd_id,
@@ -499,12 +411,295 @@ def poll_website_commands():
             pass
         time.sleep(3)
 
+# ----------------- TRY FASTAPI ENGINE -----------------
+FASTAPI_AVAILABLE = False
+try:
+    import uvicorn
+    from fastapi import FastAPI, HTTPException, Request
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.responses import FileResponse, JSONResponse
+    from pydantic import BaseModel
+
+    app = FastAPI(title="KritiAI Desktop Engine", version="2.5.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    class TerminalReq(BaseModel):
+        command: str
+        cwd: Optional[str] = None
+        timeout: Optional[int] = 30
+
+    class WorkspaceReq(BaseModel):
+        path: str
+
+    class FileCreateReq(BaseModel):
+        path: str
+        content: str
+        overwrite: Optional[bool] = True
+
+    class FolderCreateReq(BaseModel):
+        path: str
+
+    class ScriptRunReq(BaseModel):
+        filePath: str
+        runtime: Optional[str] = "auto"
+
+    class PairVerifyReq(BaseModel):
+        code: str
+        websiteUrl: Optional[str] = "https://kritiai.vercel.app"
+
+    class ChatProxyReq(BaseModel):
+        provider: Optional[str] = "groq"
+        apiKey: Optional[str] = ""
+        payload: Dict[str, Any]
+
+    @app.get("/api/health")
+    async def api_health():
+        return core_health_check()
+
+    @app.get("/api/workspace")
+    async def api_get_workspace():
+        return core_get_workspace()
+
+    @app.post("/api/workspace")
+    async def api_set_workspace(req: WorkspaceReq):
+        try:
+            return core_set_workspace(req.path)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.post("/api/terminal/run")
+    async def api_run_terminal(req: TerminalReq):
+        return core_run_terminal(req.command, req.cwd, req.timeout)
+
+    @app.get("/api/fs/list")
+    async def api_fs_list(subpath: Optional[str] = ""):
+        return core_list_files(subpath or "")
+
+    @app.post("/api/fs/create-file")
+    async def api_fs_create_file(req: FileCreateReq):
+        try:
+            return core_create_file(req.path, req.content)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.post("/api/fs/create-folder")
+    async def api_fs_create_folder(req: FolderCreateReq):
+        try:
+            return core_create_folder(req.path)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/api/fs/read-file")
+    async def api_fs_read_file(path: str):
+        try:
+            return core_read_file(path)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="File not found")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.post("/api/fs/run-script")
+    async def api_fs_run_script(req: ScriptRunReq):
+        try:
+            return core_run_script(req.filePath, req.runtime or "auto")
+        except FileNotFoundError as fe:
+            raise HTTPException(status_code=404, detail=str(fe))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/api/pair/state")
+    async def api_pair_state():
+        return core_get_pair_state()
+
+    @app.post("/api/pair/connect")
+    async def api_pair_connect(req: PairVerifyReq):
+        return core_pair_connect(req.code, req.websiteUrl)
+
+    @app.post("/api/pair/unpair")
+    async def api_pair_unpair():
+        return core_pair_unpair()
+
+    @app.post("/api/chat")
+    async def api_chat(req: ChatProxyReq):
+        try:
+            return core_chat_proxy(req.provider or "groq", req.apiKey or "", req.payload)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    if DIST_DIR.exists():
+        app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="assets")
+
+        @app.get("/{full_path:path}")
+        async def serve_frontend(full_path: str):
+            file_path = DIST_DIR / full_path
+            if file_path.exists() and file_path.is_file():
+                return FileResponse(file_path)
+            index_file = DIST_DIR / "index.html"
+            if index_file.exists():
+                return FileResponse(index_file)
+            return JSONResponse({"status": "KritiAI Backend Online. dist/index.html not yet built."}, status_code=200)
+
+    FASTAPI_AVAILABLE = True
+except ImportError:
+    FASTAPI_AVAILABLE = False
+    logger.info("FastAPI/uvicorn not found, activating built-in Python standard library HTTP engine.")
+
+# ----------------- BUILT-IN PYTHON HTTP ENGINE (ZERO DEPENDENCIES) -----------------
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs
+
+class BuiltinDesktopHandler(BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        pass # Silent logging
+
+    def send_cors_headers(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
+        self.send_header("Access-Control-Allow-Headers", "*")
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_cors_headers()
+        self.end_headers()
+
+    def send_json(self, data: Any, status: int = 200):
+        body = json.dumps(data).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_cors_headers()
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        qs = parse_qs(parsed.query)
+
+        if path == "/api/health":
+            self.send_json(core_health_check())
+        elif path == "/api/workspace":
+            self.send_json(core_get_workspace())
+        elif path == "/api/fs/list":
+            subpath = qs.get("subpath", [""])[0]
+            self.send_json(core_list_files(subpath))
+        elif path == "/api/fs/read-file":
+            filepath = qs.get("path", [""])[0]
+            try:
+                self.send_json(core_read_file(filepath))
+            except FileNotFoundError:
+                self.send_json({"error": "File not found"}, 404)
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
+        elif path == "/api/pair/state":
+            self.send_json(core_get_pair_state())
+        else:
+            # Serve static files from dist/
+            rel = path.lstrip("/")
+            file_path = DIST_DIR / rel if rel else DIST_DIR / "index.html"
+            if not file_path.exists() or file_path.is_dir():
+                file_path = DIST_DIR / "index.html"
+
+            if file_path.exists() and file_path.is_file():
+                mime, _ = mimetypes.guess_type(str(file_path))
+                mime = mime or "application/octet-stream"
+                try:
+                    with open(file_path, "rb") as f:
+                        content = f.read()
+                    self.send_response(200)
+                    self.send_header("Content-Type", mime)
+                    self.send_header("Content-Length", str(len(content)))
+                    self.send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(content)
+                except Exception:
+                    self.send_response(500)
+                    self.end_headers()
+            else:
+                self.send_json({"status": "KritiAI Desktop Engine Online."}, 200)
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        content_len = int(self.headers.get("Content-Length", 0))
+        post_data = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else "{}"
+        try:
+            body = json.loads(post_data)
+        except Exception:
+            body = {}
+
+        if path == "/api/workspace":
+            try:
+                self.send_json(core_set_workspace(body.get("path", "")))
+            except Exception as e:
+                self.send_json({"error": str(e)}, 400)
+        elif path == "/api/terminal/run":
+            res = core_run_terminal(body.get("command", ""), body.get("cwd"), body.get("timeout", 30))
+            self.send_json(res)
+        elif path == "/api/fs/create-file":
+            try:
+                res = core_create_file(body.get("path", ""), body.get("content", ""))
+                self.send_json(res)
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
+        elif path == "/api/fs/create-folder":
+            try:
+                res = core_create_folder(body.get("path", ""))
+                self.send_json(res)
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
+        elif path == "/api/fs/run-script":
+            try:
+                res = core_run_script(body.get("filePath", ""), body.get("runtime", "auto"))
+                self.send_json(res)
+            except FileNotFoundError as fe:
+                self.send_json({"error": str(fe)}, 404)
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
+        elif path == "/api/pair/connect":
+            res = core_pair_connect(body.get("code", ""), body.get("websiteUrl", "https://kritiai.vercel.app"))
+            self.send_json(res)
+        elif path == "/api/pair/unpair":
+            self.send_json(core_pair_unpair())
+        elif path == "/api/chat":
+            try:
+                res = core_chat_proxy(body.get("provider", "groq"), body.get("apiKey", ""), body.get("payload", {}))
+                self.send_json(res)
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
+        else:
+            self.send_json({"error": "Endpoint not found"}, 404)
+
+class ThreadingDesktopHTTPServer(HTTPServer):
+    daemon_threads = True
+
 def start_server(port: int = 9972):
-    # Start polling thread
     t = threading.Thread(target=poll_website_commands, daemon=True)
     t.start()
-    # Run uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+
+    if FASTAPI_AVAILABLE:
+        logger.info(f"Starting KritiAI ASGI Server on port {port}...")
+        server_config = uvicorn.Config(
+            app,
+            host="127.0.0.1",
+            port=port,
+            log_level="warning",
+            access_log=False,
+            loop="asyncio"
+        )
+        server = uvicorn.Server(server_config)
+        server.run()
+    else:
+        logger.info(f"Starting KritiAI Built-in HTTP Server on port {port}...")
+        server = ThreadingDesktopHTTPServer(("127.0.0.1", port), BuiltinDesktopHandler)
+        server.serve_forever()
 
 def main():
     port = 9972
@@ -513,15 +708,22 @@ def main():
         if s.connect_ex(("127.0.0.1", port)) == 0:
             port = 9973
 
-    # Start FastAPI in background thread
+    server_only = "--server-only" in sys.argv
+
+    if server_only:
+        start_server(port)
+        return
+
+    # Start engine in background thread
     server_thread = threading.Thread(target=start_server, args=(port,), daemon=True)
     server_thread.start()
-    time.sleep(1.5)
+    time.sleep(1.2)
 
     target_url = f"http://127.0.0.1:{port}"
     logger.info(f"KritiAI Desktop Application running at: {target_url}")
 
-    # Launch native Edge WebView2 window via pywebview
+    # Launch native Edge WebView2 window via pywebview or Edge App Mode
+    launched = False
     try:
         import webview
         window = webview.create_window(
@@ -534,11 +736,20 @@ def main():
             text_select=True
         )
         webview.start()
+        launched = True
     except Exception as e:
-        logger.warning(f"Native webview fallback to default browser: {e}")
-        import webbrowser
-        webbrowser.open(target_url)
-        # Keep process alive
+        logger.warning(f"Native webview fallback to Edge/browser: {e}")
+
+    if not launched:
+        edge1 = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+        edge2 = r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+        edge = edge1 if os.path.exists(edge1) else (edge2 if os.path.exists(edge2) else None)
+        if edge:
+            subprocess.Popen([edge, f"--app={target_url}", "--window-size=1280,820"])
+        else:
+            import webbrowser
+            webbrowser.open(target_url)
+
         while True:
             time.sleep(1)
 

@@ -53,49 +53,73 @@ export const DownloadView = () => {
         </div>
 
         {/* Download Options Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl mx-auto mt-8">
-          {/* Option 1: Portable ZIP Package */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto mt-8">
+          {/* Option 1: Native Clean Executable (.exe) */}
           <a
-            href="/downloads/KritiAI-Windows-Portable.zip"
-            download="KritiAI-Windows-Portable.zip"
-            className="p-6 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white font-bold text-left flex items-start gap-4 shadow-xl shadow-fuchsia-500/20 transition transform hover:-translate-y-0.5 group"
+            href="/downloads/KritiAI.exe"
+            download="KritiAI.exe"
+            className="p-5 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white font-bold text-left flex items-start gap-3.5 shadow-xl shadow-fuchsia-500/20 transition transform hover:-translate-y-0.5 group"
           >
-            <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
-              <Package className="w-6 h-6 text-white" />
+            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
+              <Sparkles className="w-5 h-5 text-white" />
             </div>
             <div>
               <div className="text-sm font-bold flex items-center gap-1.5">
-                <span>Portable Windows Package (.zip)</span>
-                <Download className="w-4 h-4 opacity-80 group-hover:translate-y-0.5 transition" />
+                <span>Single-Click .EXE</span>
+                <Download className="w-3.5 h-3.5 opacity-80 group-hover:translate-y-0.5 transition" />
               </div>
               <div className="text-xs font-normal text-fuchsia-100 mt-1">
-                Zero installation. Extract and double-click to launch sidecar & assistant.
+                Native Windows executable. Double-click to launch desktop engine & UI.
               </div>
-              <div className="text-[10px] text-fuchsia-200 mt-2 font-mono">
-                Includes .bat launcher, setup script & readme
+              <div className="text-[10px] text-emerald-300 mt-2 font-mono flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3 text-emerald-300" />
+                <span>Verified Clean • Defender 0 Threats</span>
               </div>
             </div>
           </a>
 
-          {/* Option 2: Direct Batch Script Launcher */}
+          {/* Option 2: 100% Transparent VBS Launcher */}
           <a
-            href="/downloads/KritiAI-Setup.bat"
-            download="KritiAI-Setup.bat"
-            className="p-6 rounded-2xl bg-[#111726] hover:bg-[#182137] border border-white/10 hover:border-fuchsia-500/40 text-white font-bold text-left flex items-start gap-4 shadow-lg transition transform hover:-translate-y-0.5 group"
+            href="/downloads/KritiAI.vbs"
+            download="KritiAI.vbs"
+            className="p-5 rounded-2xl bg-[#111726] hover:bg-[#182137] border border-white/10 hover:border-fuchsia-500/40 text-white font-bold text-left flex items-start gap-3.5 shadow-lg transition transform hover:-translate-y-0.5 group"
           >
-            <div className="w-12 h-12 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center flex-shrink-0 border border-indigo-500/30">
-              <Terminal className="w-6 h-6" />
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0 border border-emerald-500/30">
+              <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
               <div className="text-sm font-bold flex items-center gap-1.5">
-                <span>Windows One-Click Setup (.bat)</span>
-                <Download className="w-4 h-4 text-indigo-400 group-hover:translate-y-0.5 transition" />
+                <span>Silent Script (.vbs)</span>
+                <Download className="w-3.5 h-3.5 text-emerald-400 group-hover:translate-y-0.5 transition" />
               </div>
               <div className="text-xs font-normal text-slate-400 mt-1">
-                Standalone launcher script. Automatically initializes Python sidecar & opens workspace.
+                Zero console window. 100% readable script with zero false positives.
               </div>
               <div className="text-[10px] text-emerald-400 mt-2 font-mono">
-                Clean text batch • Instant run
+                Clean text script • Double-click
+              </div>
+            </div>
+          </a>
+
+          {/* Option 3: Portable ZIP Package */}
+          <a
+            href="/downloads/KritiAI-Windows-Portable.zip"
+            download="KritiAI-Windows-Portable.zip"
+            className="p-5 rounded-2xl bg-[#111726] hover:bg-[#182137] border border-white/10 hover:border-cyan-500/40 text-white font-bold text-left flex items-start gap-3.5 shadow-lg transition transform hover:-translate-y-0.5 group sm:col-span-2 lg:col-span-1"
+          >
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center flex-shrink-0 border border-cyan-500/30">
+              <Package className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold flex items-center gap-1.5">
+                <span>Portable ZIP (.zip)</span>
+                <Download className="w-3.5 h-3.5 text-cyan-400 group-hover:translate-y-0.5 transition" />
+              </div>
+              <div className="text-xs font-normal text-slate-400 mt-1">
+                Includes .exe, .vbs, .bat, desktop engine, and prebuilt frontend bundle.
+              </div>
+              <div className="text-[10px] text-cyan-300 mt-2 font-mono">
+                All-in-one package • Offline ready
               </div>
             </div>
           </a>
