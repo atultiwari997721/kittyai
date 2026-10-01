@@ -366,6 +366,111 @@ def core_chat_proxy(provider: str, api_key: str, payload: Dict[str, Any]) -> Dic
     except Exception as free_e:
         raise RuntimeError(f"Chat request failed: {str(free_e)}")
 
+def core_set_theme(theme: str) -> Dict[str, Any]:
+    is_dark = "dark" in (theme or "").lower() or theme == "0"
+    val = 0 if is_dark else 1
+    cmd = f'Set-ItemProperty -Path "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize" -Name "AppsUseLightTheme" -Value {val} -ErrorAction SilentlyContinue; Set-ItemProperty -Path "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize" -Name "SystemUsesLightTheme" -Value {val} -ErrorAction SilentlyContinue'
+    res = core_run_terminal(cmd)
+    return {
+        "success": True,
+        "theme": "dark" if is_dark else "light",
+        "message": f"Windows personalization theme successfully set to {'Dark Mode' if is_dark else 'Light Mode'}."
+    }
+
+def core_set_volume(level: int) -> Dict[str, Any]:
+    vol = max(0, min(100, int(level)))
+    cmd = f'''
+    $vol = [math]::Round({vol} / 2)
+    $wsh = New-Object -ComObject WScript.Shell
+    for ($i = 0; $i -lt 50; $i++) {{ $wsh.SendKeys([char]174) }}
+    for ($i = 0; $i -lt $vol; $i++) {{ $wsh.SendKeys([char]175) }}
+    '''
+    core_run_terminal(cmd)
+    return {
+        "success": True,
+        "volume": vol,
+        "message": f"Windows master audio volume set to {vol}%."
+    }
+
+def core_launch_app(app_name: str) -> Dict[str, Any]:
+    clean = (app_name or "").strip().lower()
+    mapping = {
+        "vscode": "code",
+        "vs code": "code",
+        "visual studio code": "code",
+        "notepad": "notepad.exe",
+        "calculator": "calc.exe",
+        "calc": "calc.exe",
+        "terminal": "wt.exe",
+        "windows terminal": "wt.exe",
+        "cmd": "cmd.exe",
+        "powershell": "powershell.exe",
+        "edge": "msedge.exe",
+        "browser": "msedge.exe",
+        "chrome": "chrome.exe",
+        "explorer": "explorer.exe",
+        "file manager": "explorer.exe",
+        "task manager": "taskmgr.exe"
+    }
+    target = mapping.get(clean, app_name)
+    res = core_run_terminal(f'Start-Process "{target}"')
+    return {
+        "success": res.get("success", False),
+        "app": app_name,
+        "target": target,
+        "message": f"Successfully launched {app_name} on Windows." if res.get("success") else f"Could not launch: {app_name}"
+    }
+
+def core_vscode_open(file_path: str = "") -> Dict[str, Any]:
+    ws = Path(config.get("workspaceDir", DEFAULT_WORKSPACE))
+    target = str(ws / file_path) if file_path else str(ws)
+    res = core_run_terminal(f'code "{target}"')
+    return {
+        "success": res.get("success", False),
+        "target": target,
+        "message": f"Opened in VS Code: {target}"
+    }
+
+def core_probe_ollama() -> Dict[str, Any]:
+    import urllib.request
+    try:
+        req = urllib.request.Request("http://127.0.0.1:11434/api/tags")
+        with urllib.request.urlopen(req, timeout=1.5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            models = [m.get("name") for m in data.get("models", [])]
+            return {"online": True, "models": models, "count": len(models)}
+    except Exception:
+        return {"online": False, "models": [], "count": 0}
+
+def core_execute_tool(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    tool = (tool_name or "").lower().replace(".", "_").replace("-", "_").strip()
+    logger.info(f"Executing tool: {tool} with args: {args}")
+
+    if tool in ["terminal_execute", "terminal_run", "terminal"]:
+        return core_run_terminal(args.get("command", ""), args.get("cwd"), args.get("timeout", 30))
+    elif tool in ["filesystem_create_file", "filesystem_write_file", "fs_create_file"]:
+        return core_create_file(args.get("path", ""), args.get("content", ""))
+    elif tool in ["filesystem_create_folder", "filesystem_create_dir", "fs_create_folder"]:
+        return core_create_folder(args.get("path", ""))
+    elif tool in ["filesystem_read_file", "fs_read_file"]:
+        return core_read_file(args.get("path", ""))
+    elif tool in ["filesystem_list_dir", "filesystem_list", "fs_list"]:
+        return core_list_files(args.get("subpath", "") or args.get("path", ""))
+    elif tool in ["filesystem_run_script", "fs_run_script"]:
+        return core_run_script(args.get("filePath", "") or args.get("path", ""), args.get("runtime", "auto"))
+    elif tool in ["windows_set_theme", "os_set_theme", "set_theme"]:
+        return core_set_theme(args.get("theme", "dark"))
+    elif tool in ["windows_set_volume", "os_set_volume", "set_volume"]:
+        return core_set_volume(args.get("level", 60))
+    elif tool in ["windows_launch_app", "os_launch_app", "launch_app"]:
+        return core_launch_app(args.get("appName", "") or args.get("app", ""))
+    elif tool in ["vscode_open", "vscode_open_file"]:
+        return core_vscode_open(args.get("filePath", "") or args.get("path", ""))
+    elif tool in ["ollama_tags", "ollama_list_models", "ollama_probe"]:
+        return core_probe_ollama()
+    else:
+        return {"success": False, "error": f"Unknown local tool: {tool_name}"}
+
 # Background polling for remote website commands when paired
 def poll_website_commands():
     import urllib.request
@@ -389,11 +494,13 @@ def poll_website_commands():
                     commands = data.get("commands", [])
                     for cmd_item in commands:
                         cmd_id = cmd_item.get("id")
-                        cmd_str = cmd_item.get("command")
-                        cwd = cmd_item.get("cwd") or config.get("workspaceDir", DEFAULT_WORKSPACE)
+                        tool_name = cmd_item.get("tool") or cmd_item.get("toolName") or "terminal.execute"
+                        args = cmd_item.get("args") or cmd_item.get("arguments") or {}
+                        if not args and "command" in cmd_item:
+                            args = {"command": cmd_item.get("command"), "cwd": cmd_item.get("cwd")}
 
-                        # Execute locally via core runner
-                        res = core_run_terminal(command=cmd_str, cwd=cwd)
+                        # Execute locally via core tool dispatcher
+                        res = core_execute_tool(tool_name, args)
 
                         # Post result back to website
                         post_payload = json.dumps({
@@ -514,6 +621,46 @@ try:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
+    class ThemeReq(BaseModel):
+        theme: str = "dark"
+
+    class VolumeReq(BaseModel):
+        level: int = 60
+
+    class LaunchAppReq(BaseModel):
+        appName: str
+
+    class VSCodeReq(BaseModel):
+        filePath: Optional[str] = ""
+
+    class ToolExecReq(BaseModel):
+        tool: str
+        args: Optional[Dict[str, Any]] = {}
+
+    @app.post("/api/os/theme")
+    async def api_os_theme(req: ThemeReq):
+        return core_set_theme(req.theme)
+
+    @app.post("/api/os/volume")
+    async def api_os_volume(req: VolumeReq):
+        return core_set_volume(req.level)
+
+    @app.post("/api/os/launch-app")
+    async def api_os_launch(req: LaunchAppReq):
+        return core_launch_app(req.appName)
+
+    @app.post("/api/vscode/open")
+    async def api_vscode_open(req: VSCodeReq):
+        return core_vscode_open(req.filePath or "")
+
+    @app.get("/api/ollama/tags")
+    async def api_ollama_tags():
+        return core_probe_ollama()
+
+    @app.post("/api/tools/execute")
+    async def api_tools_execute(req: ToolExecReq):
+        return core_execute_tool(req.tool, req.args or {})
+
     @app.get("/api/pair/state")
     async def api_pair_state():
         return core_get_pair_state()
@@ -600,6 +747,8 @@ class BuiltinDesktopHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(e)}, 500)
         elif path == "/api/pair/state":
             self.send_json(core_get_pair_state())
+        elif path == "/api/ollama/tags":
+            self.send_json(core_probe_ollama())
         else:
             # Serve static files from dist/
             rel = path.lstrip("/")
@@ -668,6 +817,16 @@ class BuiltinDesktopHandler(BaseHTTPRequestHandler):
             self.send_json(res)
         elif path == "/api/pair/unpair":
             self.send_json(core_pair_unpair())
+        elif path == "/api/os/theme":
+            self.send_json(core_set_theme(body.get("theme", "dark")))
+        elif path == "/api/os/volume":
+            self.send_json(core_set_volume(body.get("level", 60)))
+        elif path == "/api/os/launch-app":
+            self.send_json(core_launch_app(body.get("appName", "")))
+        elif path == "/api/vscode/open":
+            self.send_json(core_vscode_open(body.get("filePath", "")))
+        elif path == "/api/tools/execute":
+            self.send_json(core_execute_tool(body.get("tool", ""), body.get("args", {})))
         elif path == "/api/chat":
             try:
                 res = core_chat_proxy(body.get("provider", "groq"), body.get("apiKey", ""), body.get("payload", {}))

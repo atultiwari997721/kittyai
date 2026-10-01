@@ -23,6 +23,7 @@ import {
   X
 } from 'lucide-react';
 import { kritiService } from '../services/kritiService';
+import { toolService } from '../services/toolService';
 import { IntegrationGuideModal } from './IntegrationGuideModal';
 
 export const PluginsHub = () => {
@@ -87,13 +88,13 @@ export const PluginsHub = () => {
     setIsSendingWa(true);
     setWaResult(null);
 
-    setTimeout(() => {
-      setIsSendingWa(false);
-      setWaResult({
-        success: true,
-        message: `WhatsApp message queued for ${waPhone} via Baileys WebSocket gateway.`
-      });
-    }, 600);
+    const waData = await toolService.executeTool('whatsapp_prepare_message', { phoneNumber: waPhone, message: waMessage });
+    setIsSendingWa(false);
+    setWaResult({
+      success: true,
+      message: `WhatsApp message prepared for ${waPhone}.`,
+      deepLink: waData.deepLink
+    });
   };
 
   const handleRunOsAction = async (action) => {
@@ -355,9 +356,22 @@ export const PluginsHub = () => {
           </form>
 
           {waResult && (
-            <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-              <span>{waResult.message}</span>
+            <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                <span>{waResult.message}</span>
+              </div>
+              {waResult.deepLink && (
+                <a
+                  href={waResult.deepLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-[11px] flex items-center gap-1 transition"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  <span>Open WhatsApp</span>
+                </a>
+              )}
             </div>
           )}
         </div>

@@ -162,19 +162,29 @@ export default async function handler(req, res) {
     }
 
     // 4. REMOTE COMMAND EXECUTION RELAY (Website sends command to Desktop App)
-    if (action === 'send_command') {
+    if (action === 'send_command' || action === 'queue_command') {
       const token = deviceToken || req.headers['authorization']?.replace(/^Bearer\s+/i, '');
       if (!token) {
         return res.status(400).json({ success: false, message: 'Missing device token for paired command execution.' });
       }
 
       const cmdId = 'cmd_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
+      let toolName = 'terminal.execute';
+      let toolArgs = {};
+
+      if (typeof command === 'object' && command !== null) {
+        toolName = command.tool || command.toolName || req.body.tool || 'terminal.execute';
+        toolArgs = command.args || command.arguments || req.body.args || {};
+      } else {
+        toolName = req.body.tool || (req.body.type === 'fs_create' ? 'filesystem.create_file' : 'terminal.execute');
+        toolArgs = req.body.args || { command: command || '', cwd: req.body.cwd || null };
+      }
+
       const cmdItem = {
         id: cmdId,
-        command: command || '',
-        type: req.body.type || 'terminal', // 'terminal' | 'fs_create' | 'fs_list' | 'run_script'
-        payload: req.body.payload || {},
-        cwd: req.body.cwd || null,
+        tool: toolName,
+        args: toolArgs,
+        command: typeof command === 'string' ? command : (toolArgs.command || ''),
         status: 'pending',
         createdAt: Date.now()
       };

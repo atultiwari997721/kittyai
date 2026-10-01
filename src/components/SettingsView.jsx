@@ -461,10 +461,10 @@ export const SettingsView = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             <div>
-              <label className="text-slate-400 block mb-1">Sidecar FastAPI URL</label>
+              <label className="text-slate-400 block mb-1">Desktop Kernel & Sidecar URL (Port 9972)</label>
               <input
                 type="text"
-                value={settings.sidecarUrl}
+                value={settings.sidecarUrl || 'http://127.0.0.1:9972'}
                 onChange={(e) => setSettings(prev => ({ ...prev, sidecarUrl: e.target.value }))}
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2 text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
               />
@@ -474,7 +474,7 @@ export const SettingsView = () => {
               <label className="text-slate-400 block mb-1">Local Ollama URL</label>
               <input
                 type="text"
-                value={settings.ollamaUrl}
+                value={settings.ollamaUrl || 'http://127.0.0.1:11434'}
                 onChange={(e) => setSettings(prev => ({ ...prev, ollamaUrl: e.target.value }))}
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2 text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
               />
@@ -492,7 +492,7 @@ export const SettingsView = () => {
               }`}></span>
               <span>
                 {sidecarStatus === 'online'
-                  ? 'Python Sidecar Connected (Port 8000)'
+                  ? 'Desktop Kernel Online (Port 9972) - Windows Execution Engine Active'
                   : 'Native Browser Engine Active (Direct multi-model inference & local vault)'}
               </span>
             </div>

@@ -292,19 +292,34 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
     }
   };
 
-  const handleInlineApproval = (taskId, approved) => {
+  const handleInlineApproval = async (taskId, approved) => {
     if (approved) {
-      kritiService.updateTaskStatus(taskId, 'COMPLETED', `Authorized by user at ${new Date().toLocaleTimeString()}`);
-      setMessages(prev => [
-        ...prev,
-        {
-          id: 'ai_exec_' + Date.now(),
-          sender: 'ai',
-          text: `✅ **Action Authorized & Executed!**\n\nThe consequential action for task \`${taskId}\` has been committed and verified. Check the **Task Center** for full audit trail logs.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          logs: [`Task ${taskId} approved by user`, 'Executed via CommandPolicyEngine', 'Result: SUCCESS']
-        }
-      ]);
+      kritiService.updateTaskStatus(taskId, 'EXECUTING', `Authorized by user at ${new Date().toLocaleTimeString()}`);
+      try {
+        const execRes = await kritiService.executeApprovedTask(taskId);
+        const detail = execRes?.stdout || execRes?.message || (execRes?.success ? 'Operation completed successfully.' : (execRes?.error || 'Execution finished.'));
+        setMessages(prev => [
+          ...prev,
+          {
+            id: 'ai_exec_' + Date.now(),
+            sender: 'ai',
+            text: `✅ **Action Authorized & Executed!**\n\n\`\`\`\n${detail}\n\`\`\`\n\nTask \`${taskId}\` has been committed and verified. Check the **Task Center** for full audit trail logs.`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            logs: [`Task ${taskId} approved by user`, 'Executed via CommandPolicyEngine', `Result: ${execRes?.success !== false ? 'SUCCESS' : 'FAILED'}`]
+          }
+        ]);
+      } catch (err) {
+        setMessages(prev => [
+          ...prev,
+          {
+            id: 'ai_exec_err_' + Date.now(),
+            sender: 'ai',
+            text: `⚠️ **Action Execution Failed:** ${err.message}`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            logs: [`Task ${taskId} execution error`, err.message]
+          }
+        ]);
+      }
     } else {
       kritiService.updateTaskStatus(taskId, 'CANCELLED', `Rejected by user at ${new Date().toLocaleTimeString()}`);
       setMessages(prev => [

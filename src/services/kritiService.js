@@ -12,6 +12,10 @@
  * - Local Python Sidecar integration with normalized JSON responses
  */
 
+import { orchestratorService } from './orchestratorService';
+import { toolService } from './toolService';
+import { aiProviderService } from './aiProviderService';
+
 const STORAGE_KEYS = {
   SETTINGS: 'kritiai_settings',
   MEMORIES: 'kritiai_memories',
@@ -24,7 +28,7 @@ const STORAGE_KEYS = {
 const DEFAULT_SETTINGS = {
   activeModel: 'groq-llama3', // Default to fast Groq LPUs or auto-detect based on configured keys
   selectedAgent: 'AUTO',
-  sidecarUrl: 'http://127.0.0.1:8000',
+  sidecarUrl: 'http://127.0.0.1:9972',
   ollamaUrl: 'http://127.0.0.1:11434',
   ollamaModel: 'llama3.2',
   groqApiKey: 'gsk_TOMZuMkhgyOpPwXeUsqEWGdyb3FYGywpI8gaU9KNZ51iSfzHLGcYy',
@@ -65,7 +69,7 @@ const INITIAL_MEMORIES = [
 
 class KritiService {
   constructor() {
-    this.sidecarUrl = 'http://127.0.0.1:8000';
+    this.sidecarUrl = 'http://127.0.0.1:9972';
     this.isSidecarOnline = false;
     this.checkSidecarHealth();
   }
@@ -291,22 +295,22 @@ class KritiService {
   }
 
   async checkSidecarHealth() {
-    // 1. Check primary sidecar URL (Port 8000)
-    try {
-      const res = await fetch(`${this.sidecarUrl}/api/health`, { method: 'GET', signal: AbortSignal.timeout(1000) });
-      const data = await res.json();
-      if (data.status === 'online') {
-        this.isSidecarOnline = true;
-        return true;
-      }
-    } catch {}
-
-    // 2. Check desktop app URL (Port 9972)
+    // 1. Check desktop app URL (Port 9972)
     try {
       const res = await fetch('http://127.0.0.1:9972/api/health', { method: 'GET', signal: AbortSignal.timeout(1000) });
       const data = await res.json();
       if (data.status === 'online') {
         this.sidecarUrl = 'http://127.0.0.1:9972';
+        this.isSidecarOnline = true;
+        return true;
+      }
+    } catch {}
+
+    // 2. Check fallback sidecar URL (Port 8000)
+    try {
+      const res = await fetch(`${this.sidecarUrl}/api/health`, { method: 'GET', signal: AbortSignal.timeout(1000) });
+      const data = await res.json();
+      if (data.status === 'online') {
         this.isSidecarOnline = true;
         return true;
       }
@@ -343,45 +347,92 @@ class KritiService {
     const settings = this.getSettings();
     const selectedAgent = agentOverride || settings.selectedAgent || 'AUTO';
 
-    // 1. If Sidecar is online, send with full keys & model context
-    if (this.isSidecarOnline) {
-      try {
-        const groqKey = this.getApiKey('groq');
-        const geminiKey = this.getApiKey('gemini');
-        const openaiKey = this.getApiKey('openai');
-        const nvidiaKey = this.getApiKey('nvidia');
-
-        const response = await fetch(`${this.sidecarUrl}/api/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            prompt: userText, 
-            model: activeModel, 
-            agent: selectedAgent,
-            history: history,
-            groqApiKey: groqKey,
-            geminiApiKey: geminiKey,
-            openaiApiKey: openaiKey,
-            nvidiaApiKey: nvidiaKey
-          })
-        });
-        if (response.ok) {
-          const data = await response.json();
-          // Normalize reply field to protect frontend rendering
-          const replyText = data.reply || data.summary || data.reasoning || "Task processed by local sidecar.";
-          return {
-            ...data,
-            reply: replyText,
-            logs: data.executionLog || data.logs || ['Executed via Python Sidecar']
-          };
-        }
-      } catch (err) {
-        console.warn('Sidecar chat execution fallback to native engine:', err);
+    // Direct memory fast path
+    const lower = (userText || '').toLowerCase();
+    if (lower.includes('remember that') || lower.includes('remember my') || lower.includes('note that my')) {
+      const match = userText.match(/(?:remember that|remember my|note that my)\s+([a-zA-Z0-9_\-\s]+?)\s+(?:means|is)\s+(.*)/i);
+      if (match) {
+        const entity = match[1].trim();
+        const value = match[2].trim();
+        this.saveMemory(entity, { description: value, learnedAt: new Date().toISOString() }, 'contacts');
+        return {
+          reply: `🧠 **Recorded to Memory Vault!**\n\nI have memorized that your **"${entity}"** refers to: *${value}*.\n\nFrom now on, whenever you ask me to perform tasks associated with "${entity}", I will automatically resolve them!`,
+          logs: ['Memory intent recognized', `Entity "${entity}" saved to vault`, 'Persistence: OK'],
+          requiresClarification: false
+        };
       }
     }
 
-    // 2. Native Intelligence Engine with Real Groq / Gemini / Multi-Model Execution
-    return await this.masterAnalyzerPipeline(userText, selectedAgent, activeModel, settings, history);
+    // Primary: Orchestrator Pipeline with full Multi-Model AI + Real Tool Execution Loop
+    try {
+      const result = await orchestratorService.processRequest({
+        prompt: userText,
+        agentPreference: selectedAgent,
+        modelPreference: activeModel,
+        history: history
+      });
+
+      let replyText = result.reply || "Task completed.";
+      let taskObj = null;
+      let approvalNeeded = null;
+
+      if (result.pendingApproval) {
+        const p = result.pendingApproval;
+        taskObj = {
+          id: p.id,
+          goal: userText,
+          agent: selectedAgent,
+          model: activeModel,
+          status: 'WAITING_APPROVAL',
+          riskLevel: p.risk || 'high',
+          steps: result.logs || [],
+          approvalData: {
+            type: p.tool === 'gmail_send' ? 'EMAIL_SEND' : (p.tool === 'calendar_create_event' ? 'CALENDAR_CREATE' : 'CODE_PATCH'),
+            tool: p.tool,
+            args: p.args,
+            recipient: p.args?.to,
+            subject: p.args?.subject,
+            body: p.args?.body,
+            title: p.args?.title,
+            date: p.args?.startTime,
+            attendees: Array.isArray(p.args?.attendees) ? p.args.attendees.join(', ') : p.args?.attendees,
+            file: p.args?.path || p.args?.filePath,
+            diff: p.args?.command || p.args?.content,
+            ...p.args
+          },
+          createdAt: new Date().toISOString()
+        };
+        this.saveTask(taskObj);
+        approvalNeeded = taskObj.approvalData;
+      }
+
+      return {
+        reply: replyText,
+        logs: result.logs,
+        executedTools: result.executedTools,
+        task: taskObj,
+        approvalNeeded: approvalNeeded,
+        requiresClarification: false
+      };
+    } catch (err) {
+      console.warn('Orchestrator error, falling back to master analyzer:', err);
+      return await this.masterAnalyzerPipeline(userText, selectedAgent, activeModel, settings, history);
+    }
+  }
+
+  async executeApprovedTask(taskId) {
+    const task = this.getTasks().find(t => t.id === taskId);
+    if (!task || !task.approvalData) {
+      return { success: false, error: 'Task not found or has no approval data.' };
+    }
+
+    const { tool, args } = task.approvalData;
+    if (tool) {
+      const res = await toolService.executeTool(tool, args || {});
+      this.updateTaskStatus(taskId, res.success !== false ? 'COMPLETED' : 'FAILED', JSON.stringify(res));
+      return res;
+    }
+    return { success: true, message: 'Task authorized.' };
   }
 
   async masterAnalyzerPipeline(text, agentPref, model, settings, history = []) {
@@ -425,9 +476,10 @@ class KritiService {
       const isDark = !lower.includes('light');
       settings.windowsTheme = isDark ? 'dark' : 'light';
       this.saveSettings({ windowsTheme: settings.windowsTheme });
+      const toolRes = await toolService.executeTool('windows_set_theme', { theme: settings.windowsTheme });
       return {
-        reply: `🖥️ **Windows Theme Switched to ${isDark ? 'Dark Mode' : 'Light Mode'}**\n\nSystem personalization theme adjusted (ms-settings:personalization-colors).\n\n*(Executed via Windows OS Agent)*`,
-        logs: ['Master Analyzer ➔ OS_NAV', `Theme: ${settings.windowsTheme}`, 'Status: COMPLETED'],
+        reply: `🖥️ **Windows Theme Switched to ${isDark ? 'Dark Mode' : 'Light Mode'}**\n\n${toolRes.message || 'System personalization theme updated via Windows Registry.'}\n\n*(Executed via Windows OS Agent)*`,
+        logs: ['Master Analyzer ➔ OS_NAV', `Theme: ${settings.windowsTheme}`, `Status: ${toolRes.success !== false ? 'COMPLETED' : 'OFFLINE_NOTE'}`],
         requiresClarification: false
       };
     }
@@ -437,15 +489,25 @@ class KritiService {
       const newVol = volMatch ? Math.min(100, Math.max(0, parseInt(volMatch[1], 10))) : 60;
       settings.volumeLevel = newVol;
       this.saveSettings({ volumeLevel: newVol });
+      const toolRes = await toolService.executeTool('windows_set_volume', { level: newVol });
       return {
-        reply: `🔊 **Master Audio Volume Adjusted to ${newVol}%**\n\nSystem master audio mixer updated successfully.\n\n*(Executed via Windows OS Agent)*`,
-        logs: ['Master Analyzer ➔ OS_NAV', `Volume: ${newVol}%`, 'Status: COMPLETED'],
+        reply: `🔊 **Master Audio Volume Adjusted to ${newVol}%**\n\n${toolRes.message || 'System master audio mixer updated successfully.'}\n\n*(Executed via Windows OS Agent)*`,
+        logs: ['Master Analyzer ➔ OS_NAV', `Volume: ${newVol}%`, `Status: ${toolRes.success !== false ? 'COMPLETED' : 'OFFLINE_NOTE'}`],
         requiresClarification: false
       };
     }
 
     // 4. Consequential Email Action Handling with Real Draft Preparation
     if ((lower.includes('send email') || lower.includes('draft email') || lower.includes('write an email')) && (lower.includes('to') || lower.includes('saying'))) {
+      const googleToken = localStorage.getItem('google_access_token');
+      if (!googleToken) {
+        return {
+          reply: `✉️ **Google Account Connection Required**\n\nTo send or draft emails via Gmail, please connect your Google account in **Settings ➔ Plugins**.\n\nOnce connected, emails can be drafted and dispatched with your explicit authorization.`,
+          logs: ['Master Analyzer ➔ EMAIL_AGENT', 'Google Auth: Not Connected', 'Configuration Required'],
+          requiresClarification: false
+        };
+      }
+
       const teamMem = memories.find(m => m.key.toLowerCase().includes('team'));
       let recipient = 'colleague@project.io';
       if (lower.includes('rahul')) recipient = 'rahul@project.io';
@@ -490,6 +552,8 @@ class KritiService {
         ],
         approvalData: {
           type: 'EMAIL_SEND',
+          tool: 'gmail_send',
+          args: { to: recipient, subject: subject, body: body },
           recipient: recipient,
           subject: subject,
           body: body
@@ -513,6 +577,15 @@ class KritiService {
 
     // 5. Consequential Calendar Action Handling
     if (lower.includes('schedule a meeting') || lower.includes('schedule meeting') || lower.includes('set up a meeting')) {
+      const googleToken = localStorage.getItem('google_access_token');
+      if (!googleToken) {
+        return {
+          reply: `📅 **Google Calendar Connection Required**\n\nTo schedule meetings and generate genuine Google Meet rooms, please connect your Google account in **Settings ➔ Plugins**.\n\nOnce connected, events will synchronize directly with your official Google Calendar.`,
+          logs: ['Master Analyzer ➔ CALENDAR_AGENT', 'Google Auth: Not Connected', 'Configuration Required'],
+          requiresClarification: false
+        };
+      }
+
       const teamMem = memories.find(m => m.key.toLowerCase().includes('team'));
       const attendees = teamMem ? (teamMem.value?.members?.map(m => m.email).join(', ') || 'team@project.io') : 'colleagues@project.io';
       const taskId = 'task_cal_' + Date.now();
@@ -526,23 +599,27 @@ class KritiService {
         steps: [
           'Master Analyzer: Classified intent as CALENDAR_AGENT',
           `Resolved attendees from Memory Vault: ${attendees}`,
-          'Checked Google Calendar for time conflicts: 0 conflicts detected',
-          'Generated dedicated Google Meet room'
+          'Prepared official Google Calendar event dispatch'
         ],
         approvalData: {
           type: 'CALENDAR_CREATE',
+          tool: 'calendar_create_event',
+          args: {
+            title: 'Project Team Sync & Review',
+            startTime: 'Tomorrow, 5:00 PM',
+            attendees: [attendees],
+            description: 'Team sync via KritiAI'
+          },
           title: 'Project Team Sync & Review',
           date: 'Tomorrow, 5:00 PM - 5:45 PM',
-          attendees: attendees,
-          platform: 'Google Meet',
-          meetingUrl: `https://meet.google.com/kri-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 5)}`
+          attendees: attendees
         },
         createdAt: new Date().toISOString()
       };
       this.saveTask(calTask);
 
       return {
-        reply: `📅 **Calendar Event Prepared**\n\n- **Title:** Project Team Sync & Review\n- **Time:** Tomorrow at 5:00 PM\n- **Participants (from Memory Vault):** \`${attendees}\`\n- **Meeting Link:** [Google Meet Link](${calTask.approvalData.meetingUrl})\n\n*Review and confirm to add this event to Google Calendar:*`,
+        reply: `📅 **Calendar Event Prepared**\n\n- **Title:** Project Team Sync & Review\n- **Time:** Tomorrow at 5:00 PM\n- **Participants (from Memory Vault):** \`${attendees}\`\n\n*Review and confirm to add this event to Google Calendar:*`,
         task: calTask,
         approvalNeeded: calTask.approvalData,
         logs: [
@@ -1623,152 +1700,27 @@ ${memorySnippet}`;
     if (!command || !command.trim()) {
       return { success: false, error: 'No command specified.' };
     }
-    const cleanCmd = command.trim();
-
-    // Check if sidecar is available
-    if (this.isSidecarOnline) {
-      try {
-        const res = await fetch(`${this.sidecarUrl}/api/terminal/run`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command: cleanCmd, cwd, timeout })
-        });
-        if (res.ok) {
-          return await res.json();
-        }
-      } catch (e) {
-        console.warn('Direct terminal execution failed:', e);
-      }
-    }
-
-    // If running in browser without sidecar online, check if paired
-    const pairState = this.getPairingState();
-    if (pairState.paired) {
-      return {
-        success: true,
-        command: cleanCmd,
-        stdout: `[Desktop Kernel Relay: ${pairState.deviceName}]\nExecuting: ${cleanCmd}\nDone (Exit Code: 0)`,
-        stderr: '',
-        returncode: 0,
-        cwd: cwd || 'K:\\Projects\\kittyai',
-        elapsedMs: 142
-      };
-    }
-
-    return {
-      success: false,
-      command: cleanCmd,
-      stdout: '',
-      stderr: 'Sidecar offline. Run "KritiAI-Setup.bat" or link the Desktop App via 6-digit code to execute live terminal commands on your Windows machine.',
-      returncode: 1,
-      cwd: cwd || 'Local',
-      elapsedMs: 0
-    };
+    return await toolService.executeTool('terminal_execute', { command: command.trim(), cwd, timeout });
   }
 
   async createFile(path, content, overwrite = true) {
-    if (this.isSidecarOnline) {
-      try {
-        const res = await fetch(`${this.sidecarUrl}/api/fs/create-file`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path, content, overwrite })
-        });
-        if (res.ok) return await res.json();
-      } catch (e) {
-        console.warn('File creation request failed:', e);
-      }
-    }
-
-    const pairState = this.getPairingState();
-    if (pairState.paired) {
-      return {
-        success: true,
-        path: path,
-        filename: path.split(/[\\/]/).pop(),
-        sizeBytes: content.length,
-        message: `File created on ${pairState.deviceName}: ${path} (${content.length} bytes)`
-      };
-    }
-
-    return {
-      success: false,
-      error: 'Sidecar is offline. Start the Windows launcher or pair Desktop App to create files on disk.'
-    };
+    return await toolService.executeTool('filesystem_create_file', { path, content, overwrite });
   }
 
   async createFolder(path) {
-    if (this.isSidecarOnline) {
-      try {
-        const res = await fetch(`${this.sidecarUrl}/api/fs/create-folder`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path })
-        });
-        if (res.ok) return await res.json();
-      } catch (e) {}
-    }
-
-    return {
-      success: true,
-      path: path,
-      message: `Folder created at: ${path}`
-    };
+    return await toolService.executeTool('filesystem_create_dir', { path });
   }
 
   async listFiles(path = null) {
-    if (this.isSidecarOnline) {
-      try {
-        const url = path ? `${this.sidecarUrl}/api/fs/list?path=${encodeURIComponent(path)}` : `${this.sidecarUrl}/api/fs/list`;
-        const res = await fetch(url);
-        if (res.ok) return await res.json();
-      } catch (e) {}
-    }
-    return {
-      success: true,
-      cwd: path || 'K:\\Projects\\kittyai',
-      entries: [
-        { name: 'src', path: 'K:\\Projects\\kittyai\\src', isDir: true, size: 0 },
-        { name: 'sidecar', path: 'K:\\Projects\\kittyai\\sidecar', isDir: true, size: 0 },
-        { name: 'public', path: 'K:\\Projects\\kittyai\\public', isDir: true, size: 0 },
-        { name: 'package.json', path: 'K:\\Projects\\kittyai\\package.json', isDir: false, size: 1343 },
-        { name: 'vite.config.js', path: 'K:\\Projects\\kittyai\\vite.config.js', isDir: false, size: 1420 }
-      ]
-    };
+    return await toolService.executeTool('filesystem_list_dir', { subpath: path || '' });
   }
 
   async readFile(filePath) {
-    if (this.isSidecarOnline) {
-      try {
-        const res = await fetch(`${this.sidecarUrl}/api/fs/read-file?path=${encodeURIComponent(filePath)}`);
-        if (res.ok) return await res.json();
-      } catch (e) {
-        console.warn('Read file sidecar error:', e);
-      }
-    }
-    return { success: false, error: 'Sidecar offline or file could not be read.' };
+    return await toolService.executeTool('filesystem_read_file', { path: filePath });
   }
 
   async runScript(filePath, runtime = 'auto') {
-    if (this.isSidecarOnline) {
-      try {
-        const res = await fetch(`${this.sidecarUrl}/api/fs/run-script`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filePath, runtime })
-        });
-        if (res.ok) return await res.json();
-      } catch (e) {
-        console.warn('Script runner error:', e);
-      }
-    }
-    const cleanPath = filePath.replace(/"/g, '\\"');
-    const ext = (filePath.split('.').pop() || '').toLowerCase();
-    if (ext === 'py') return await this.executeTerminal(`python "${cleanPath}"`);
-    if (ext === 'js' || ext === 'ts' || ext === 'mjs') return await this.executeTerminal(`node "${cleanPath}"`);
-    if (ext === 'ps1') return await this.executeTerminal(`powershell.exe -ExecutionPolicy Bypass -File "${cleanPath}"`);
-    if (ext === 'bat' || ext === 'cmd') return await this.executeTerminal(`"${cleanPath}"`);
-    return await this.executeTerminal(`python "${cleanPath}"`);
+    return await toolService.executeTool('filesystem_run_script', { filePath, runtime });
   }
 
   async runCode(code, language = 'python', filename = null, cwd = null) {
