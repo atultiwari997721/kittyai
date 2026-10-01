@@ -289,16 +289,49 @@ class KritiService {
   }
 
   async checkSidecarHealth() {
+    // 1. Check primary sidecar URL (Port 8000)
     try {
-      const res = await fetch(`${this.sidecarUrl}/api/health`, { method: 'GET', signal: AbortSignal.timeout(1500) });
+      const res = await fetch(`${this.sidecarUrl}/api/health`, { method: 'GET', signal: AbortSignal.timeout(1000) });
       const data = await res.json();
-      this.isSidecarOnline = data.status === 'online';
-      return this.isSidecarOnline;
-    } catch {
-      this.isSidecarOnline = false;
-      return false;
-    }
+      if (data.status === 'online') {
+        this.isSidecarOnline = true;
+        return true;
+      }
+    } catch {}
+
+    // 2. Check desktop app URL (Port 9972)
+    try {
+      const res = await fetch('http://127.0.0.1:9972/api/health', { method: 'GET', signal: AbortSignal.timeout(1000) });
+      const data = await res.json();
+      if (data.status === 'online') {
+        this.sidecarUrl = 'http://127.0.0.1:9972';
+        this.isSidecarOnline = true;
+        return true;
+      }
+    } catch {}
+
+    this.isSidecarOnline = false;
+    return false;
   }
+
+  getWorkspaceDir() {
+    return localStorage.getItem('kritiai_workspace_dir') || 'K:\\Projects\\kittyai';
+  }
+
+  setWorkspaceDir(dirPath) {
+    if (!dirPath) return this.getWorkspaceDir();
+    const clean = dirPath.trim();
+    localStorage.setItem('kritiai_workspace_dir', clean);
+    if (this.isSidecarOnline) {
+      fetch(`${this.sidecarUrl}/api/workspace`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: clean })
+      }).catch(() => {});
+    }
+    return clean;
+  }
+
 
   /**
    * Master Analyzer & Process Chat Pipeline
@@ -1392,38 +1425,47 @@ ${memorySnippet}`;
   }
 
   async generatePairCode(clientType = 'web', deviceName = 'KritiAI Web Client') {
-    // Generate clean 6-digit alphanumeric code
+    // 1. Try serverless /api/pair endpoint first
+    try {
+      const res = await fetch('/api/pair', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'generate', clientType, deviceName })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const state = {
+          paired: false,
+          code: data.code,
+          deviceToken: data.deviceToken,
+          deviceName: deviceName,
+          generatedAt: new Date().toISOString(),
+          expiresAt: data.expiresAt
+        };
+        localStorage.setItem(STORAGE_KEYS.PAIRING, JSON.stringify(state));
+        return { success: true, code: data.code, expiresAt: data.expiresAt, deviceToken: data.deviceToken };
+      }
+    } catch (e) {
+      console.warn('Serverless pair code generate fallback:', e);
+    }
+
+    // 2. Fallback to local generation
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
     for (let i = 0; i < 6; i++) {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
 
-    try {
-      if (this.isSidecarOnline) {
-        const res = await fetch(`${this.sidecarUrl}/api/pair/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ clientType, deviceName })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          code = data.code || code;
-        }
-      }
-    } catch (e) {
-      console.warn('Sidecar pair code generation fallback to local code:', e);
-    }
-
     const state = {
       paired: false,
       code: code,
+      deviceToken: 'dt_' + code.toLowerCase() + '_' + Date.now(),
       deviceName: deviceName,
       generatedAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString()
     };
     localStorage.setItem(STORAGE_KEYS.PAIRING, JSON.stringify(state));
-    return { success: true, code, expiresAt: state.expiresAt };
+    return { success: true, code, expiresAt: state.expiresAt, deviceToken: state.deviceToken };
   }
 
   async verifyPairCode(code, clientType = 'desktop', deviceName = 'Windows Desktop Kernel') {
@@ -1432,26 +1474,40 @@ ${memorySnippet}`;
       return { success: false, message: 'Please enter a valid 6-digit alphanumeric code (e.g. KR72B9).' };
     }
 
+    let token = 'dt_' + clean.toLowerCase() + '_' + Date.now();
     let pairedDevice = deviceName;
+
+    // 1. Try serverless /api/pair verify
     try {
-      if (this.isSidecarOnline) {
-        const res = await fetch(`${this.sidecarUrl}/api/pair/verify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: clean, clientType, deviceName })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.pairedDevice) pairedDevice = data.pairedDevice;
-        }
+      const res = await fetch('/api/pair', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'verify', code: clean, clientType, deviceName })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.deviceToken) token = data.deviceToken;
+        if (data.deviceName) pairedDevice = data.deviceName;
       }
     } catch (e) {
-      console.warn('Sidecar pair verify fallback to local verification:', e);
+      console.warn('Serverless verify fallback to local:', e);
+    }
+
+    // 2. Also notify local sidecar if online
+    if (this.isSidecarOnline) {
+      try {
+        await fetch(`${this.sidecarUrl}/api/pair/connect`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: clean })
+        });
+      } catch (err) {}
     }
 
     const state = {
       paired: true,
       code: clean,
+      deviceToken: token,
       deviceName: pairedDevice,
       pairedAt: new Date().toISOString()
     };
@@ -1461,6 +1517,25 @@ ${memorySnippet}`;
       message: `Successfully linked with ${pairedDevice}! Code: ${clean}`,
       state
     };
+  }
+
+  async autoConnectPairing() {
+    const state = this.getPairingState();
+    if (!state.paired || !state.deviceToken) return state;
+
+    try {
+      const res = await fetch(`/api/pair?action=status&deviceToken=${encodeURIComponent(state.deviceToken)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.paired) {
+          state.paired = true;
+          state.status = 'connected';
+          localStorage.setItem(STORAGE_KEYS.PAIRING, JSON.stringify(state));
+          return state;
+        }
+      }
+    } catch {}
+    return state;
   }
 
   async unpairDevice() {
@@ -1590,6 +1665,40 @@ ${memorySnippet}`;
         { name: 'vite.config.js', path: 'K:\\Projects\\kittyai\\vite.config.js', isDir: false, size: 1420 }
       ]
     };
+  }
+
+  async readFile(filePath) {
+    if (this.isSidecarOnline) {
+      try {
+        const res = await fetch(`${this.sidecarUrl}/api/fs/read-file?path=${encodeURIComponent(filePath)}`);
+        if (res.ok) return await res.json();
+      } catch (e) {
+        console.warn('Read file sidecar error:', e);
+      }
+    }
+    return { success: false, error: 'Sidecar offline or file could not be read.' };
+  }
+
+  async runScript(filePath, runtime = 'auto') {
+    if (this.isSidecarOnline) {
+      try {
+        const res = await fetch(`${this.sidecarUrl}/api/fs/run-script`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePath, runtime })
+        });
+        if (res.ok) return await res.json();
+      } catch (e) {
+        console.warn('Script runner error:', e);
+      }
+    }
+    const cleanPath = filePath.replace(/"/g, '\\"');
+    const ext = (filePath.split('.').pop() || '').toLowerCase();
+    if (ext === 'py') return await this.executeTerminal(`python "${cleanPath}"`);
+    if (ext === 'js' || ext === 'ts' || ext === 'mjs') return await this.executeTerminal(`node "${cleanPath}"`);
+    if (ext === 'ps1') return await this.executeTerminal(`powershell.exe -ExecutionPolicy Bypass -File "${cleanPath}"`);
+    if (ext === 'bat' || ext === 'cmd') return await this.executeTerminal(`"${cleanPath}"`);
+    return await this.executeTerminal(`python "${cleanPath}"`);
   }
 
   async runCode(code, language = 'python', filename = null, cwd = null) {

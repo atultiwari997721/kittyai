@@ -19,7 +19,11 @@ import {
   Sliders, 
   Code2, 
   ChevronRight,
-  ExternalLink
+  ExternalLink,
+  Edit2,
+  RotateCcw,
+  FolderOpen,
+  FileText
 } from 'lucide-react';
 import { kritiService } from '../services/kritiService';
 
@@ -27,7 +31,10 @@ export const TerminalWorkspace = ({ onOpenPairing }) => {
   const [activeTab, setActiveTab] = useState('terminal'); // 'terminal' | 'codestudio' | 'files'
   const [commandInput, setCommandInput] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
-  const [workingDir, setWorkingDir] = useState('K:\\Projects\\kittyai');
+  const [workingDir, setWorkingDir] = useState(() => kritiService.getWorkspaceDir());
+  const [newDirInput, setNewDirInput] = useState(() => kritiService.getWorkspaceDir());
+  const [isEditingDir, setIsEditingDir] = useState(false);
+  const [folderChangeStatus, setFolderChangeStatus] = useState(null);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [commandHistory, setCommandHistory] = useState([]);
   
@@ -92,13 +99,17 @@ if __name__ == "__main__":
 
   useEffect(() => {
     setPairingState(kritiService.getPairingState());
-    loadWorkspaceFiles();
+    const currentWs = kritiService.getWorkspaceDir();
+    setWorkingDir(currentWs);
+    setNewDirInput(currentWs);
+    loadWorkspaceFiles(currentWs);
   }, []);
 
-  const loadWorkspaceFiles = async () => {
+  const loadWorkspaceFiles = async (dir = null) => {
+    const targetDir = dir || workingDir;
     setIsLoadingFiles(true);
     try {
-      const res = await kritiService.listFiles(workingDir);
+      const res = await kritiService.listFiles(targetDir);
       if (res && res.entries) {
         setFileList(res.entries);
       }
@@ -107,6 +118,89 @@ if __name__ == "__main__":
     } finally {
       setIsLoadingFiles(false);
     }
+  };
+
+  const handleSetWorkspaceDir = (dirToSet = null) => {
+    const target = (dirToSet || newDirInput).trim();
+    if (!target) return;
+    const resolved = kritiService.setWorkspaceDir(target);
+    setWorkingDir(resolved);
+    setNewDirInput(resolved);
+    setIsEditingDir(false);
+    setFolderChangeStatus({ type: 'success', text: `Active workspace folder set to: ${resolved}` });
+    setTimeout(() => setFolderChangeStatus(null), 3500);
+    loadWorkspaceFiles(resolved);
+  };
+
+  const handleResetDefaultWorkspace = () => {
+    handleSetWorkspaceDir('K:\\Projects\\kittyai');
+  };
+
+  const handleOpenFileInStudio = async (fileItem) => {
+    if (fileItem.isDir) return;
+    try {
+      setFileActionStatus({ type: 'info', text: `Reading file ${fileItem.name} from disk...` });
+      const targetPath = fileItem.path || fileItem.name;
+      const res = await kritiService.readFile(targetPath);
+      let content = '';
+      if (res && res.success && res.content !== undefined) {
+        content = res.content;
+      } else if (typeof res === 'string') {
+        content = res;
+      } else {
+        const catRes = await kritiService.executeTerminal(`Get-Content -Path "${targetPath}" -Raw`, workingDir);
+        if (catRes.success && catRes.stdout) {
+          content = catRes.stdout;
+        } else {
+          content = `// Path: ${targetPath}\n// File ready for editing in KritiAI Code Studio.\n`;
+        }
+      }
+      setCodeContent(content);
+      setFilePath(targetPath);
+
+      // Auto-detect language
+      const ext = (fileItem.name.split('.').pop() || '').toLowerCase();
+      if (['py'].includes(ext)) setCodeLanguage('python');
+      else if (['js', 'jsx', 'mjs', 'cjs'].includes(ext)) setCodeLanguage('javascript');
+      else if (['ts', 'tsx'].includes(ext)) setCodeLanguage('typescript');
+      else if (['ps1'].includes(ext)) setCodeLanguage('powershell');
+      else if (['bat', 'cmd'].includes(ext)) setCodeLanguage('batch');
+      else if (['json'].includes(ext)) setCodeLanguage('json');
+      else if (['html', 'css'].includes(ext)) setCodeLanguage('html');
+      else setCodeLanguage('python');
+
+      setActiveTab('codestudio');
+      setFileActionStatus({
+        type: 'success',
+        text: `Opened "${fileItem.name}" in AI Code Studio (${content.length} characters).`
+      });
+    } catch (err) {
+      setFileActionStatus({ type: 'error', text: `Failed to open file: ${err.message}` });
+    }
+  };
+
+  const isExecutableFile = (fileName) => {
+    const ext = (fileName.split('.').pop() || '').toLowerCase();
+    return ['py', 'js', 'mjs', 'ps1', 'bat', 'cmd'].includes(ext);
+  };
+
+  const handleRunFileInTerminal = async (fileItem, e) => {
+    if (e) e.stopPropagation();
+    if (fileItem.isDir || isExecuting) return;
+
+    const fileName = fileItem.name;
+    const targetPath = fileItem.path || fileItem.name;
+    const ext = (fileName.split('.').pop() || '').toLowerCase();
+    
+    let cmd = '';
+    if (ext === 'py') cmd = `python "${targetPath}"`;
+    else if (['js', 'mjs'].includes(ext)) cmd = `node "${targetPath}"`;
+    else if (ext === 'ps1') cmd = `powershell.exe -ExecutionPolicy Bypass -File "${targetPath}"`;
+    else if (['bat', 'cmd'].includes(ext)) cmd = `"${targetPath}"`;
+    else cmd = `python "${targetPath}"`;
+
+    setActiveTab('terminal');
+    await handleRunCommand(cmd);
   };
 
   const handleRunCommand = async (cmdToRun = null) => {
@@ -324,6 +418,103 @@ if __name__ == "__main__":
             </span>
           </button>
         </div>
+      </div>
+
+      {/* Interactive Workspace Folder Selector Bar */}
+      <div className="glass-panel p-4 rounded-3xl border border-white/5 space-y-3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
+              <FolderOpen className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <span>Active Project Workspace Folder</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              </div>
+              <div className="font-mono text-xs text-amber-200 truncate font-medium">
+                {workingDir}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => setIsEditingDir(!isEditingDir)}
+              className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 text-xs font-medium flex items-center gap-1.5 transition"
+            >
+              <Edit2 className="w-3.5 h-3.5 text-amber-400" />
+              <span>{isEditingDir ? 'Close Selector' : 'Change Folder'}</span>
+            </button>
+            <button
+              onClick={handleResetDefaultWorkspace}
+              title="Reset to default workspace directory"
+              className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-400 hover:text-slate-200 text-xs font-medium flex items-center gap-1.5 transition"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Reset Default</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Change Folder Drawer / Inline Bar */}
+        {isEditingDir && (
+          <div className="pt-3 border-t border-white/5 space-y-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <input
+                type="text"
+                value={newDirInput}
+                onChange={(e) => setNewDirInput(e.target.value)}
+                placeholder="Enter absolute Windows folder path (e.g. K:\Projects\kittyai or C:\Users\name\Desktop\Project)"
+                className="flex-1 bg-black/60 border border-amber-500/30 rounded-xl px-3.5 py-2 font-mono text-xs text-amber-200 focus:outline-none focus:border-amber-400"
+              />
+              <button
+                onClick={() => handleSetWorkspaceDir()}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-lg shadow-amber-500/20"
+              >
+                <Check className="w-4 h-4" />
+                <span>Apply & Set</span>
+              </button>
+            </div>
+
+            {/* Quick Presets */}
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+              <span className="text-slate-500 font-medium mr-1">Presets:</span>
+              <button
+                onClick={() => handleSetWorkspaceDir('K:\\Projects\\kittyai')}
+                className="px-2 py-0.5 rounded-lg bg-black/40 hover:bg-white/10 border border-white/10 text-slate-300 font-mono transition"
+              >
+                K:\Projects\kittyai (Default Root)
+              </button>
+              <button
+                onClick={() => handleSetWorkspaceDir('K:\\Projects\\kittyai\\workspace')}
+                className="px-2 py-0.5 rounded-lg bg-black/40 hover:bg-white/10 border border-white/10 text-slate-300 font-mono transition"
+              >
+                workspace
+              </button>
+              <button
+                onClick={() => handleSetWorkspaceDir('K:\\Projects\\kittyai\\desktop')}
+                className="px-2 py-0.5 rounded-lg bg-black/40 hover:bg-white/10 border border-white/10 text-slate-300 font-mono transition"
+              >
+                desktop
+              </button>
+              <button
+                onClick={() => handleSetWorkspaceDir('K:\\Projects\\kittyai\\src')}
+                className="px-2 py-0.5 rounded-lg bg-black/40 hover:bg-white/10 border border-white/10 text-slate-300 font-mono transition"
+              >
+                src
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Folder Change Notification Toast */}
+        {folderChangeStatus && (
+          <div className="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+            <span>{folderChangeStatus.text}</span>
+          </div>
+        )}
       </div>
 
       {/* Main Tabs Navigation */}
@@ -646,31 +837,75 @@ if __name__ == "__main__":
 
           {/* File Explorer Grid */}
           <div className="glass-panel p-5 rounded-3xl border border-white/5 space-y-3">
-            <h3 className="text-xs font-bold text-white flex items-center gap-2">
-              <Folder className="w-4 h-4 text-sky-400" />
-              <span>Workspace Files in {workingDir}</span>
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs font-mono">
-              {fileList.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 rounded-2xl bg-black/40 border border-white/5 hover:border-white/20 transition flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2.5 overflow-hidden">
-                    {item.isDir ? (
-                      <Folder className="w-4 h-4 text-sky-400 flex-shrink-0" />
-                    ) : (
-                      <File className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                    )}
-                    <span className="truncate text-slate-200">{item.name}</span>
-                  </div>
-                  <span className="text-[10px] text-slate-500 flex-shrink-0">
-                    {item.isDir ? 'DIR' : `${item.size} B`}
-                  </span>
-                </div>
-              ))}
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-white flex items-center gap-2">
+                <Folder className="w-4 h-4 text-sky-400" />
+                <span>Workspace Files in {workingDir}</span>
+              </h3>
+              <span className="text-[11px] text-slate-500 font-mono">
+                {fileList.length} items • Click file to open in Code Studio
+              </span>
             </div>
+
+            {fileList.length === 0 ? (
+              <div className="p-8 text-center rounded-2xl bg-black/30 border border-white/5 space-y-2">
+                <FolderOpen className="w-8 h-8 text-slate-600 mx-auto" />
+                <p className="text-xs text-slate-400">No files found in this workspace directory.</p>
+                <p className="text-[11px] text-slate-500">Create a file or folder above, or select another workspace folder.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs font-mono">
+                {fileList.map((item, idx) => {
+                  const isExec = !item.isDir && isExecutableFile(item.name);
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => !item.isDir && handleOpenFileInStudio(item)}
+                      className={`p-3 rounded-2xl bg-black/40 border border-white/5 hover:border-indigo-500/40 hover:bg-white/5 transition flex items-center justify-between group ${
+                        !item.isDir ? 'cursor-pointer' : ''
+                      }`}
+                      title={item.isDir ? 'Directory' : 'Click to open and edit in AI Code Studio'}
+                    >
+                      <div className="flex items-center gap-2.5 overflow-hidden min-w-0 pr-2">
+                        {item.isDir ? (
+                          <Folder className="w-4 h-4 text-sky-400 flex-shrink-0" />
+                        ) : (
+                          <FileCode2 className="w-4 h-4 text-indigo-400 flex-shrink-0 group-hover:text-fuchsia-400 transition" />
+                        )}
+                        <div className="truncate">
+                          <div className="truncate text-slate-200 group-hover:text-white font-medium transition">
+                            {item.name}
+                          </div>
+                          <div className="text-[10px] text-slate-500 flex items-center gap-1.5">
+                            <span>{item.isDir ? 'DIR' : `${item.sizeBytes || item.size || 0} B`}</span>
+                            {item.modified && <span>• {item.modified}</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {isExec && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleRunFileInTerminal(item, e)}
+                            title="Run script directly in Windows Terminal"
+                            className="px-2 py-1 rounded-lg bg-emerald-600/30 hover:bg-emerald-500/60 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold flex items-center gap-1 transition"
+                          >
+                            <Play className="w-2.5 h-2.5 fill-emerald-300" />
+                            <span>Run</span>
+                          </button>
+                        )}
+                        {!item.isDir && (
+                          <span className="text-[10px] text-indigo-300/80 group-hover:text-indigo-200 transition hidden sm:inline">
+                            Edit →
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

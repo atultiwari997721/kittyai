@@ -61,13 +61,73 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
+  const loginWithGoogle = async () => {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
+    if (error) throw error;
+    return data;
+  };
+
   const logout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+    setUser(null);
+    setSession(null);
+    setProfile(null);
+  };
+
+  // Cross-device resource synchronization (Chats, Memories, Settings)
+  const syncToCloud = async (key, payload) => {
+    if (!user) return;
+    try {
+      await supabase
+        .from('user_sync_data')
+        .upsert({
+          user_id: user.id,
+          sync_key: key,
+          payload: payload,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id, sync_key' });
+    } catch (e) {
+      console.warn('Cloud sync background warning:', e);
+    }
+  };
+
+  const loadFromCloud = async (key) => {
+    if (!user) return null;
+    try {
+      const { data, error } = await supabase
+        .from('user_sync_data')
+        .select('payload')
+        .eq('user_id', user.id)
+        .eq('sync_key', key)
+        .single();
+      if (!error && data?.payload) {
+        return data.payload;
+      }
+    } catch (e) {
+      console.warn('Cloud load warning:', e);
+    }
+    return null;
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, login, signup, logout, loading }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      session, 
+      profile, 
+      login, 
+      signup, 
+      loginWithGoogle,
+      logout, 
+      syncToCloud,
+      loadFromCloud,
+      loading 
+    }}>
       {!loading && children}
     </AuthContext.Provider>
   );

@@ -28,3 +28,8 @@ dist-ssr
 .wwebjs_cache
 server/.wwebjs_auth
 server/.wwebjs_cache
+
+# Python
+__pycache__/
+*.pyc
+desktop_config.json
