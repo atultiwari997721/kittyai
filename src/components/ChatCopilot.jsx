@@ -23,11 +23,12 @@ import {
   Cpu,
   Key,
   Zap,
-  AlertCircle
+  AlertCircle,
+  MessageCircle
 } from 'lucide-react';
 import { kritiService } from '../services/kritiService';
 
-export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateToControls }) => {
+export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateToControls, onNavigateToWhatsApp }) => {
   const [messages, setMessages] = useState([
     {
       id: 'welcome_1',
@@ -272,6 +273,7 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
             task: response.task,
             approvalNeeded: response.approvalNeeded,
             meetingLink: response.meetingLink,
+            whatsappData: response.whatsappData,
             logs: response.logs
           }
         ]);
@@ -757,6 +759,45 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
                           <ExternalLink className="w-3 h-3" />
                           Join
                         </a>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* WhatsApp Web Action Card */}
+                  {msg.whatsappData && (
+                    <div className="mt-3 p-3.5 rounded-xl bg-emerald-950/70 border border-emerald-500/40 space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-emerald-300 font-bold uppercase text-[10px] tracking-wider">
+                          <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>WhatsApp Web: Ready to Dispatch</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                          AI Automated
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded bg-black/60 text-slate-300 text-[11px] space-y-1">
+                        <div><strong>To:</strong> {msg.whatsappData.recipient} ({msg.whatsappData.phone})</div>
+                        <div className="text-slate-400 text-[10px] italic whitespace-pre-wrap">"{msg.whatsappData.message}"</div>
+                      </div>
+                      <div className="flex items-center gap-2 pt-1">
+                        <a
+                          href={msg.whatsappData.webUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1.5 shadow transition"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Open in WhatsApp Web</span>
+                        </a>
+                        {onNavigateToWhatsApp && (
+                          <button
+                            type="button"
+                            onClick={onNavigateToWhatsApp}
+                            className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 text-[11px] font-medium flex items-center gap-1 transition"
+                          >
+                            <span>Open Studio</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}

@@ -66,6 +66,25 @@ export class OrchestratorService {
       log(`Retrieved ${savedMemories.length} personal memory records.`);
     }
 
+    const savedProfile = JSON.parse(localStorage.getItem('kritiai_user_profile') || 'null');
+    let profilePrompt = '';
+    if (savedProfile) {
+      profilePrompt = `\n[USER PERSONAL PROFILE & CONTINUOUS LEARNED CONTEXT]:
+- Name: ${savedProfile.name || 'Atul'}
+- Role / Profession: ${savedProfile.role || 'Senior Software Engineer & AI Architect'}
+- Preferred Tech Stack: ${(savedProfile.techStack || []).join(', ')}
+- Personal Interests: ${(savedProfile.interests || []).join(', ')}
+- Communication Style: ${savedProfile.communicationStyle || 'Nominal, direct, smart, concise'}
+- Workspace: ${savedProfile.workspacePath || 'K:\\Projects\\kittyai'}
+- Learned Personal Facts & Preferences:
+${(savedProfile.learnedFacts || []).map(f => `  * ${f}`).join('\n')}
+
+MANDATORY PERSONALIZATION DIRECTIVE:
+You are acting directly on behalf of ${savedProfile.name || 'this user'}. Always personalize responses to match their role, preferred technologies, and habits. Never produce generic responses when user context applies.
+For simple questions or greetings, be nominal, intelligent, crisp, and conversational (1-2 sentences). For complex technical or coding tasks, deliver complete, production-grade depth.`;
+      log(`Injected personal profile for ${savedProfile.name || 'User'}.`);
+    }
+
     // 2. Resolve Workspace Directory & System Environment
     const wsDir = localStorage.getItem('kritiai_workspace_dir') || 'K:\\Projects\\kittyai';
     const isDesktopOnline = await toolService.isDesktopOnline();
@@ -116,6 +135,7 @@ You are a genuine, intelligent personal assistant with DIRECT ACCESS to tools on
 
 Current Workspace Directory: ${wsDir}
 Platform: Windows (PowerShell)
+${profilePrompt}
 ${memoryPrompt}`;
 
     // 5. Build Conversational History

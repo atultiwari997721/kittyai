@@ -221,9 +221,12 @@ export const SettingsView = () => {
             {/* Groq LPUs (Fastest) */}
             <div className="space-y-1.5 p-3.5 rounded-2xl bg-black/40 border border-fuchsia-500/30">
               <div className="flex items-center justify-between">
-                <label className="text-slate-200 font-bold flex items-center gap-1.5">
+                <label className="text-slate-200 font-bold flex items-center gap-1.5 flex-wrap">
                   <Zap className="w-3.5 h-3.5 text-amber-400" />
                   <span>Groq API Key (Recommended • Ultra-Fast LPUs)</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono border border-emerald-500/30">
+                    ● Active by Default
+                  </span>
                 </label>
                 <div className="flex items-center gap-3">
                   <button

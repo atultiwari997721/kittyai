@@ -19,12 +19,14 @@ import {
   Terminal,
   Radio,
   User,
-  LogOut
+  LogOut,
+  MessageCircle
 } from 'lucide-react';
 import { ChatCopilot } from './ChatCopilot';
 import { TaskCenter } from './TaskCenter';
 import { DesktopControls } from './DesktopControls';
 import { PluginsHub } from './PluginsHub';
+import { WhatsAppWebStudio } from './WhatsAppWebStudio';
 import { MemoryVaultView } from './MemoryVaultView';
 import { SettingsView } from './SettingsView';
 import { DownloadView } from './DownloadView';
@@ -91,6 +93,7 @@ export const MainApp = () => {
 
   const navItems = [
     { id: 'chat', label: 'Chat Copilot', icon: MessageSquare, badge: 'Live AI' },
+    { id: 'whatsapp', label: 'WhatsApp Web', icon: MessageCircle, badge: 'Automate' },
     { id: 'terminal', label: 'Terminal & Code', icon: Terminal, badge: 'PowerOS' },
     { id: 'tasks', label: 'Task Center', icon: Clock, badge: pendingApprovalsCount > 0 ? `${pendingApprovalsCount} Action` : 'Ready', urgent: pendingApprovalsCount > 0 },
     { id: 'controls', label: 'Desktop Controls', icon: Monitor, badge: 'Full OS' },
@@ -325,14 +328,16 @@ export const MainApp = () => {
               onNavigateToTasks={() => setActiveTab('tasks')}
               onNavigateToMemory={() => setActiveTab('memory')}
               onNavigateToControls={() => setActiveTab('controls')}
+              onNavigateToWhatsApp={() => setActiveTab('whatsapp')}
             />
           )}
+          {activeTab === 'whatsapp' && <WhatsAppWebStudio />}
           {activeTab === 'terminal' && (
             <TerminalWorkspace onOpenPairing={() => setShowPairModal(true)} />
           )}
           {activeTab === 'tasks' && <TaskCenter />}
           {activeTab === 'controls' && <DesktopControls />}
-          {activeTab === 'plugins' && <PluginsHub />}
+          {activeTab === 'plugins' && <PluginsHub onNavigateToWhatsApp={() => setActiveTab('whatsapp')} />}
           {activeTab === 'memory' && <MemoryVaultView />}
           {activeTab === 'settings' && <SettingsView />}
           {activeTab === 'downloads' && <DownloadView />}

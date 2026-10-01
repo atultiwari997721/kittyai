@@ -26,7 +26,7 @@ import { kritiService } from '../services/kritiService';
 import { toolService } from '../services/toolService';
 import { IntegrationGuideModal } from './IntegrationGuideModal';
 
-export const PluginsHub = () => {
+export const PluginsHub = ({ onNavigateToWhatsApp }) => {
   // Plugin toggles
   const [pluginsEnabled, setPluginsEnabled] = useState({
     email: true,
@@ -353,6 +353,17 @@ export const PluginsHub = () => {
               <Send className="w-3.5 h-3.5" />
               <span>{isSendingWa ? 'Sending...' : 'Transmit WhatsApp Message'}</span>
             </button>
+
+            {onNavigateToWhatsApp && (
+              <button
+                type="button"
+                onClick={onNavigateToWhatsApp}
+                className="w-full py-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-500/30 font-medium text-xs flex items-center justify-center gap-1.5 transition"
+              >
+                <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Open Full WhatsApp Web Studio</span>
+              </button>
+            )}
           </form>
 
           {waResult && (
