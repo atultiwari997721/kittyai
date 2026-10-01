@@ -17,65 +17,113 @@ namespace KritiAI
             try
             {
                 string appDir = AppDomain.CurrentDomain.BaseDirectory;
+                string scriptPath = null;
                 string projectRoot = appDir;
-                if (!File.Exists(Path.Combine(projectRoot, "desktop", "app.py")))
+
+                // 1. Search for desktop/app.py across all candidate locations
+                string[] candidates = new string[]
                 {
-                    DirectoryInfo parentDir = Directory.GetParent(appDir);
-                    string parent = parentDir != null ? parentDir.FullName : null;
-                    if (parent != null && File.Exists(Path.Combine(parent, "desktop", "app.py")))
+                    Path.Combine(appDir, "desktop", "app.py"),
+                    Path.Combine(appDir, "app.py"),
+                    Path.GetFullPath(Path.Combine(appDir, "..", "desktop", "app.py")),
+                    Path.GetFullPath(Path.Combine(appDir, "..", "..", "desktop", "app.py")),
+                    Path.Combine(Directory.GetCurrentDirectory(), "desktop", "app.py"),
+                    @"K:\Projects\kittyai\desktop\app.py"
+                };
+
+                foreach (string candidate in candidates)
+                {
+                    if (File.Exists(candidate))
                     {
-                        projectRoot = parent;
+                        scriptPath = candidate;
+                        projectRoot = Path.GetDirectoryName(Path.GetDirectoryName(candidate));
+                        if (string.IsNullOrEmpty(projectRoot) || !Directory.Exists(projectRoot))
+                        {
+                            projectRoot = Path.GetDirectoryName(candidate);
+                        }
+                        break;
                     }
                 }
 
-                // Check if server is already running on port 9972
+                // 2. Check if server is already running on port 9972
                 bool isRunning = IsPortOpen("127.0.0.1", Port);
-                if (!isRunning)
+                if (!isRunning && scriptPath != null)
                 {
-                    // Start python desktop/app.py in background
-                    string scriptPath = Path.Combine(projectRoot, "desktop", "app.py");
-                    if (File.Exists(scriptPath))
+                    // Prefer pythonw.exe for 0-console execution
+                    string pythonExe = "pythonw";
+                    string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                    string defaultPyw = Path.Combine(localAppData, @"Programs\Python\Python312\pythonw.exe");
+                    if (File.Exists(defaultPyw))
                     {
-                        ProcessStartInfo pyPsi = new ProcessStartInfo
-                        {
-                            FileName = "python",
-                            Arguments = "\"" + scriptPath + "\"",
-                            WorkingDirectory = projectRoot,
-                            CreateNoWindow = true,
-                            UseShellExecute = false,
-                            WindowStyle = ProcessWindowStyle.Hidden
-                        };
+                        pythonExe = defaultPyw;
+                    }
+
+                    ProcessStartInfo pyPsi = new ProcessStartInfo
+                    {
+                        FileName = pythonExe,
+                        Arguments = "\"" + scriptPath + "\"",
+                        WorkingDirectory = projectRoot,
+                        CreateNoWindow = true,
+                        UseShellExecute = false,
+                        WindowStyle = ProcessWindowStyle.Hidden
+                    };
+
+                    try
+                    {
+                        Process.Start(pyPsi);
+                    }
+                    catch
+                    {
+                        // Fallback to standard python.exe
+                        pyPsi.FileName = "python";
                         try
                         {
                             Process.Start(pyPsi);
                         }
                         catch
                         {
-                            // Try py command
                             pyPsi.FileName = "py";
                             Process.Start(pyPsi);
                         }
                     }
                 }
 
-                // Wait up to 3 seconds for port to open
-                for (int i = 0; i < 15; i++)
+                // 3. Wait up to 5 seconds for port 9972 to open
+                for (int i = 0; i < 25; i++)
                 {
                     if (IsPortOpen("127.0.0.1", Port)) break;
                     Thread.Sleep(200);
                 }
 
-                // Open App URL in browser or default app window
-                Process.Start(new ProcessStartInfo
+                // 4. Launch Native Desktop App Window using Microsoft Edge App Mode
+                string targetUrl = "http://localhost:" + Port;
+                string edgePath1 = @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe";
+                string edgePath2 = @"C:\Program Files\Microsoft\Edge\Application\msedge.exe";
+                string edgeExe = File.Exists(edgePath1) ? edgePath1 : (File.Exists(edgePath2) ? edgePath2 : null);
+
+                if (edgeExe != null)
                 {
-                    FileName = "http://localhost:" + Port,
-                    UseShellExecute = true
-                });
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = edgeExe,
+                        Arguments = "--app=" + targetUrl + " --window-size=1280,820",
+                        UseShellExecute = true
+                    });
+                }
+                else
+                {
+                    // Fallback to default browser
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = targetUrl,
+                        UseShellExecute = true
+                    });
+                }
             }
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    "KritiAI Launcher encountered an error:\n\n" + ex.Message + "\n\nPlease ensure Python 3.10+ is installed.",
+                    "KritiAI Launcher encountered an error:\n\n" + ex.Message + "\n\nPlease ensure Python 3.10+ is installed or start 'KritiAI-Launcher.bat'.",
                     "KritiAI - Personal AI Operating System",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information
@@ -90,7 +138,7 @@ namespace KritiAI
                 using (TcpClient client = new TcpClient())
                 {
                     var result = client.BeginConnect(host, port, null, null);
-                    bool success = result.AsyncWaitHandle.WaitOne(300);
+                    bool success = result.AsyncWaitHandle.WaitOne(350);
                     if (!success) return false;
                     client.EndConnect(result);
                     return true;

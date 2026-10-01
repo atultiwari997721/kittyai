@@ -16,7 +16,8 @@ import {
 import { kritiService } from '../services/kritiService';
 
 export const PairingModal = ({ isOpen, onClose, onPairingChanged }) => {
-  const [activeTab, setActiveTab] = useState('generate'); // 'generate' | 'enter'
+  const isDesktopEnv = typeof window !== 'undefined' && (window.__TAURI__ || window.location.port === '9972');
+  const [activeTab, setActiveTab] = useState(isDesktopEnv ? 'enter' : 'generate'); // 'generate' | 'enter'
   const [generatedCode, setGeneratedCode] = useState('');
   const [inputCode, setInputCode] = useState('');
   const [expiresAt, setExpiresAt] = useState(null);
@@ -31,8 +32,11 @@ export const PairingModal = ({ isOpen, onClose, onPairingChanged }) => {
       const state = kritiService.getPairingState();
       setPairingState(state);
       kritiService.checkSidecarHealth().then(setSidecarOnline);
-
-      if (!state.paired && !generatedCode) {
+      const isDesk = typeof window !== 'undefined' && (window.__TAURI__ || window.location.port === '9972');
+      if (isDesk && !state.paired) {
+        setActiveTab('enter');
+      } else if (!state.paired && !generatedCode) {
+        setActiveTab('generate');
         handleGenerateCode();
       }
     }

@@ -385,6 +385,61 @@ async def unpair_app():
     save_config(config)
     return {"success": True, "message": "App unpaired from website."}
 
+# 4.5 CHAT PROXY WITH ZERO-CORS & FREE AI GATEWAY FALLBACK
+class ChatProxyRequest(BaseModel):
+    provider: Optional[str] = "groq"
+    apiKey: Optional[str] = ""
+    payload: Dict[str, Any]
+
+@app.post("/api/chat")
+async def chat_proxy(req: ChatProxyRequest):
+    import urllib.request
+    clean_key = (req.apiKey or "").strip().strip("\"'").strip()
+    if not clean_key:
+        clean_key = "gsk_TOMZuMkhgyOpPwXeUsqEWGdyb3FYGywpI8gaU9KNZ51iSfzHLGcYy"
+
+    payload = req.payload or {}
+    target_url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {clean_key}",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+
+    if req.provider == "gemini":
+        model = payload.get("model", "gemini-1.5-flash")
+        target_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
+        headers = {"Content-Type": "application/json"}
+    elif req.provider == "grok" or clean_key.startswith("xai-"):
+        target_url = "https://api.x.ai/v1/chat/completions"
+
+    try:
+        req_obj = urllib.request.Request(target_url, data=json.dumps(payload).encode("utf-8"), headers=headers)
+        with urllib.request.urlopen(req_obj, timeout=12) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if data.get("choices"):
+                return data
+    except Exception as e:
+        logger.warning(f"Desktop chat upstream error: {e}, falling back to free AI gateway...")
+
+    try:
+        free_url = "https://text.pollinations.ai/openai/chat/completions"
+        free_payload = {
+            "model": "openai-fast",
+            "messages": payload.get("messages", [{"role": "user", "content": "Hello"}]),
+            "max_tokens": payload.get("max_tokens", 2048),
+            "temperature": payload.get("temperature", 0.3)
+        }
+        free_req = urllib.request.Request(
+            free_url,
+            data=json.dumps(free_payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
+        )
+        with urllib.request.urlopen(free_req, timeout=15) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as free_e:
+        raise HTTPException(status_code=500, detail=f"Chat execution failed: {str(free_e)}")
+
 # 5. MOUNT REACT FRONTEND (STATIC ASSETS)
 if DIST_DIR.exists():
     app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="assets")
