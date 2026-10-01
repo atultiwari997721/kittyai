@@ -37,11 +37,11 @@ export default async function handler(req, res) {
       targetUrl = 'https://api.x.ai/v1/chat/completions';
     } else if (provider === 'groq' || cleanKey.startsWith('gsk_')) {
       targetUrl = 'https://api.groq.com/openai/v1/chat/completions';
-      // Sanitize decommissioned Groq models
+      // Sanitize decommissioned Groq models to active flagship llama-3.3-70b-versatile
       if (payload && payload.model) {
         const m = payload.model.toLowerCase();
-        if (m.includes('mixtral') || m.includes('llama3-') || m.includes('versatile') || m.includes('8b-instant')) {
-          payload.model = 'openai/gpt-oss-120b';
+        if (m.includes('mixtral') || m === 'llama3-70b-8192' || m === 'llama3-8b-8192') {
+          payload.model = 'llama-3.3-70b-versatile';
         }
       }
     } else if (provider === 'openai') {

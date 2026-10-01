@@ -32,7 +32,7 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
     {
       id: 'welcome_1',
       sender: 'ai',
-      text: "👋 Hello! I am **KritiAI**, your autonomous personal AI operating system.\n*\"Your Personal AI That Gets Things Done.\"*\n\nPowered by ultra-fast **Groq LPUs (Llama 3.3 70B)**, Google Gemini, and on-device Windows agents.\n\nTry asking:\n- *\"Write a complete Python FastAPI authentication service\"*\n- *\"Fix the login error in my VS Code project\"*\n- *\"Schedule a meeting with the project team tomorrow at 5 PM\"*\n- *\"Switch Windows to dark mode and set volume to 60%\"*",
+      text: "👋 Hello! I am **KritiAI**, your smart personal AI assistant.\n*\"Your Personal AI That Gets Things Done.\"*\n\nPowered by ultra-fast **Groq LPUs (Llama 3.3 70B)**, Google Gemini, and Windows tooling. How can I help you today?",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       logs: [
         'KritiAI Master Analyzer initialized',
@@ -221,6 +221,15 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const userMsgId = 'user_' + Date.now();
 
+    // Multi-turn conversational context (last 6 relevant dialogue turns)
+    const history = messages
+      .filter(m => m.text && !m.isClarificationPrompt && m.id !== 'welcome_1')
+      .slice(-6)
+      .map(m => ({
+        role: m.sender === 'user' ? 'user' : 'assistant',
+        content: m.text
+      }));
+
     setMessages(prev => [
       ...prev,
       {
@@ -234,7 +243,7 @@ export const ChatCopilot = ({ onNavigateToTasks, onNavigateToMemory, onNavigateT
     setIsLoading(true);
 
     try {
-      const response = await kritiService.processChat(text.trim(), selectedAgent, activeModel);
+      const response = await kritiService.processChat(text.trim(), selectedAgent, activeModel, history);
       const aiMsgId = 'ai_' + Date.now();
       const replyText = response.reply || response.summary || response.reasoning || "Execution completed.";
 

@@ -303,7 +303,7 @@ class KritiService {
   /**
    * Master Analyzer & Process Chat Pipeline
    */
-  async processChat(userText, agentOverride = null, modelOverride = null) {
+  async processChat(userText, agentOverride = null, modelOverride = null, history = []) {
     const activeModel = this.resolveActiveModel(modelOverride);
     const settings = this.getSettings();
     const selectedAgent = agentOverride || settings.selectedAgent || 'AUTO';
@@ -323,6 +323,7 @@ class KritiService {
             prompt: userText, 
             model: activeModel, 
             agent: selectedAgent,
+            history: history,
             groqApiKey: groqKey,
             geminiApiKey: geminiKey,
             openaiApiKey: openaiKey,
@@ -345,10 +346,10 @@ class KritiService {
     }
 
     // 2. Native Intelligence Engine with Real Groq / Gemini / Multi-Model Execution
-    return await this.masterAnalyzerPipeline(userText, selectedAgent, activeModel, settings);
+    return await this.masterAnalyzerPipeline(userText, selectedAgent, activeModel, settings, history);
   }
 
-  async masterAnalyzerPipeline(text, agentPref, model, settings) {
+  async masterAnalyzerPipeline(text, agentPref, model, settings, history = []) {
     const lower = text.toLowerCase();
     const memories = this.getMemories();
 
@@ -561,10 +562,23 @@ class KritiService {
       ? `User's Saved Memories: ${JSON.stringify(memories.map(m => ({ [m.key]: m.value })))}`
       : 'No prior memories saved.';
 
-    const systemPrompt = `You are KritiAI ("Your Personal AI That Gets Things Done"), an intelligent, direct, and capable personal assistant.
-Answer the user's question directly, accurately, and factually.
-Do NOT output internal thoughts, chain-of-thought tokens, self-corrections, or meta-commentary about your identity.
-Always provide clean, direct answers with proper formatting, code syntax blocks, and lists where appropriate.
+    const systemPrompt = `You are KritiAI ("Your Personal AI That Gets Things Done"), a nominal, interactive, intelligent, and smart personal AI assistant.
+
+CORE INTERACTION & ANSWERING RULES (MANDATORY):
+1. PROPORTIONAL & NOMINAL BREVITY:
+   - For simple conversational queries, greetings, or capability checks (e.g. "hi", "hello", "can you code?", "what can you do?", "how are you?"):
+     Reply nominally, conversationally, smartly, and crisply in 1 to 2 sentences. Acknowledge directly and ask how you can help or what they'd like to work on today.
+     NEVER dump long unsolicited resumes, feature bullet lists, syllabus breakdowns, or unrequested code blocks for simple conversational queries.
+   - For simple factual questions (e.g. "what is the capital of France?", "who invented Python?"):
+     Answer accurately, factually, and concisely in 1 to 2 sentences without filler or conversational clutter.
+   - For explicit code requests, debugging, or complex technical tasks:
+     Provide complete, clean, production-grade code with proper syntax blocks and clear, concise explanations.
+2. NATURAL & SMART INTERACTION:
+   - Act as an intelligent, sharp chat partner. Keep the dialogue interactive, helpful, and natural.
+   - Match the user's depth: if the query is brief and simple, keep the answer brief and crisp. If the query asks for deep details, provide deep quality.
+3. CLEAN RESPONSES ONLY:
+   - NEVER output internal reasoning, <think> tags, chain-of-thought, self-corrections, or meta-commentary about your instructions.
+   - Output only your polished, direct response.
 ${memorySnippet}`;
 
     // 1) xAI Grok
@@ -572,12 +586,12 @@ ${memorySnippet}`;
       const effectiveKey = grokKey || (groqKey && groqKey.startsWith('xai-') ? groqKey : null);
       if (effectiveKey) {
         try {
-          const res = await this.callGrokApi(text, effectiveKey, systemPrompt);
+          const res = await this.callGrokApi(text, effectiveKey, systemPrompt, history);
           if (res) return res;
         } catch (e) {
           console.warn('xAI Grok API error:', e);
           if (groqKey && !groqKey.startsWith('xai-')) {
-            return await this.callGroqApi(text, groqKey, false, systemPrompt);
+            return await this.callGroqApi(text, groqKey, false, systemPrompt, history);
           }
           return {
             reply: `⚠️ **xAI Grok API Error:** ${e.message}\n\nPlease check your key in **Settings ➔ AI Models** or get a new key at [console.x.ai](https://console.x.ai).`,
@@ -594,18 +608,18 @@ ${memorySnippet}`;
     if (model === 'groq-llama3' || (!geminiKey && !grokKey && groqKey)) {
       // Auto-detect if user entered an xAI key into groqKey
       if (groqKey && groqKey.startsWith('xai-')) {
-        return await this.callGrokApi(text, groqKey, systemPrompt);
+        return await this.callGrokApi(text, groqKey, systemPrompt, history);
       }
 
       if (groqKey) {
         try {
-          const res = await this.callGroqApi(text, groqKey, false, systemPrompt);
+          const res = await this.callGroqApi(text, groqKey, false, systemPrompt, history);
           if (res) return res;
         } catch (e) {
           console.warn('Groq API call error:', e);
           // If Groq fails and grokKey or geminiKey is available, smart fallback
           if (grokKey) return await this.callGrokApi(text, grokKey, systemPrompt);
-          if (geminiKey) return await this.callGeminiApi(text, geminiKey, systemPrompt);
+          if (geminiKey) return await this.callGeminiApi(text, geminiKey, systemPrompt, history);
           return {
             reply: `⚠️ **Groq API Error:** ${e.message}\n\nPlease verify your Groq API key in **Settings ➔ AI Models** (get free key at [console.groq.com/keys](https://console.groq.com/keys)).`,
             logs: ['Groq LPU call failed', e.message],
@@ -623,15 +637,15 @@ ${memorySnippet}`;
     if (model === 'gemini-2.0') {
       if (geminiKey) {
         try {
-          const res = await this.callGeminiApi(text, geminiKey, systemPrompt);
+          const res = await this.callGeminiApi(text, geminiKey, systemPrompt, history);
           if (res) return res;
         } catch (e) {
           console.warn('Gemini API call error:', e);
-          if (groqKey) return await this.callGroqApi(text, groqKey, false, systemPrompt);
+          if (groqKey) return await this.callGroqApi(text, groqKey, false, systemPrompt, history);
           if (grokKey) return await this.callGrokApi(text, grokKey, systemPrompt);
         }
       } else if (groqKey) {
-        return await this.callGroqApi(text, groqKey, false, systemPrompt);
+        return await this.callGroqApi(text, groqKey, false, systemPrompt, history);
       } else if (grokKey) {
         return await this.callGrokApi(text, grokKey, systemPrompt);
       } else {
@@ -643,15 +657,15 @@ ${memorySnippet}`;
     if (model === 'gpt-4o') {
       if (openaiKey) {
         try {
-          const res = await this.callOpenAiApi(text, openaiKey, systemPrompt);
+          const res = await this.callOpenAiApi(text, openaiKey, systemPrompt, history);
           if (res) return res;
         } catch (e) {
           console.warn('OpenAI API call error:', e);
-          if (groqKey) return await this.callGroqApi(text, groqKey, false, systemPrompt);
+          if (groqKey) return await this.callGroqApi(text, groqKey, false, systemPrompt, history);
           if (grokKey) return await this.callGrokApi(text, grokKey, systemPrompt);
         }
       } else if (groqKey) {
-        return await this.callGroqApi(text, groqKey, false, systemPrompt);
+        return await this.callGroqApi(text, groqKey, false, systemPrompt, history);
       } else if (grokKey) {
         return await this.callGrokApi(text, grokKey, systemPrompt);
       } else {
@@ -663,14 +677,14 @@ ${memorySnippet}`;
     if (model === 'nvidia-nim') {
       if (nvidiaKey) {
         try {
-          const res = await this.callNvidiaNim(text, nvidiaKey, systemPrompt);
+          const res = await this.callNvidiaNim(text, nvidiaKey, systemPrompt, history);
           if (res) return res;
         } catch (e) {
           console.warn('NVIDIA NIM API call error:', e);
-          if (groqKey) return await this.callGroqApi(text, groqKey, false, systemPrompt);
+          if (groqKey) return await this.callGroqApi(text, groqKey, false, systemPrompt, history);
         }
       } else if (groqKey) {
-        return await this.callGroqApi(text, groqKey, false, systemPrompt);
+        return await this.callGroqApi(text, groqKey, false, systemPrompt, history);
       } else {
         return this.missingKeyResponse('NVIDIA NIM (Llama 3.1 70B)', 'nvidiaApiKey', 'https://build.nvidia.com');
       }
@@ -679,10 +693,10 @@ ${memorySnippet}`;
     // 6) Local Ollama (Offline)
     if (model === 'ollama') {
       try {
-        const res = await this.callOllamaApi(text, settings.ollamaUrl, settings.ollamaModel, systemPrompt);
+        const res = await this.callOllamaApi(text, settings.ollamaUrl, settings.ollamaModel, systemPrompt, history);
         if (res) return res;
       } catch (e) {
-        if (groqKey) return await this.callGroqApi(text, groqKey, false, systemPrompt);
+        if (groqKey) return await this.callGroqApi(text, groqKey, false, systemPrompt, history);
         if (grokKey) return await this.callGrokApi(text, grokKey, systemPrompt);
         return {
           reply: `⚠️ **Local Ollama Not Reachable at ${settings.ollamaUrl}**\n\nPlease ensure Ollama is running (\`ollama run ${settings.ollamaModel}\`).\n\nYou can also enter your Groq or Grok API key in **Settings ➔ AI Models** for instant cloud inference.`,
@@ -737,18 +751,25 @@ ${memorySnippet}`;
   /**
    * Real Groq API client supporting multi-model fallback and serverless proxy
    */
-  async callGroqApi(prompt, apiKey, jsonMode = false, systemPrompt = null) {
+  async callGroqApi(prompt, apiKey, jsonMode = false, systemPrompt = null, history = []) {
     const cleanKey = this.cleanKey(apiKey);
     if (!cleanKey) throw new Error('Groq API Key is empty.');
 
     // Transparently forward xAI Grok keys
     if (cleanKey.startsWith('xai-')) {
-      return await this.callGrokApi(prompt, cleanKey, systemPrompt);
+      return await this.callGrokApi(prompt, cleanKey, systemPrompt, history);
     }
 
     const messages = [];
     if (systemPrompt) {
       messages.push({ role: 'system', content: systemPrompt });
+    }
+    if (Array.isArray(history) && history.length > 0) {
+      for (const h of history.slice(-6)) {
+        if (h && h.content && (h.role === 'user' || h.role === 'assistant')) {
+          messages.push({ role: h.role, content: h.content });
+        }
+      }
     }
     messages.push({ role: 'user', content: prompt });
 
@@ -829,8 +850,10 @@ ${memorySnippet}`;
     if (!text || typeof text !== 'string') return '';
     let cleaned = text.trim();
 
-    // 1. Remove <think>...</think> reasoning blocks from DeepSeek / Qwen / Gemma models
+    // 1. Remove <think>...</think> reasoning blocks from DeepSeek / Qwen / Gemma / OSS models
     cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    cleaned = cleaned.replace(/^[\s\S]*?<\/think>/gi, '').trim();
+    cleaned = cleaned.replace(/<thought>[\s\S]*?<\/thought>/gi, '').trim();
 
     // 2. Remove internal self-correction and reflection blocks
     if (cleaned.includes('Self-Correction') || cleaned.includes('Context provided in system prompt') || cleaned.startsWith('* User asks:')) {
@@ -946,13 +969,20 @@ ${memorySnippet}`;
   /**
    * Real xAI Grok API client (grok-2-latest, grok-2, grok-beta)
    */
-  async callGrokApi(prompt, apiKey, systemPrompt = null) {
+  async callGrokApi(prompt, apiKey, systemPrompt = null, history = []) {
     const cleanKey = this.cleanKey(apiKey);
     if (!cleanKey) throw new Error('xAI Grok API Key is empty.');
 
     const messages = [];
     if (systemPrompt) {
       messages.push({ role: 'system', content: systemPrompt });
+    }
+    if (Array.isArray(history) && history.length > 0) {
+      for (const h of history.slice(-6)) {
+        if (h && h.content && (h.role === 'user' || h.role === 'assistant')) {
+          messages.push({ role: h.role, content: h.content });
+        }
+      }
     }
     messages.push({ role: 'user', content: prompt });
 
@@ -1022,22 +1052,33 @@ ${memorySnippet}`;
     throw lastError || new Error('All xAI Grok models failed to respond.');
   }
 
-  async callGeminiApi(prompt, apiKey, systemPrompt = null) {
+  async callGeminiApi(prompt, apiKey, systemPrompt = null, history = []) {
     const cleanKey = this.cleanKey(apiKey);
     if (!cleanKey) throw new Error('Gemini API key is empty.');
 
     const candidateModels = await this.getLiveGeminiModels(cleanKey);
     let lastError = null;
 
+    const contents = [];
+    if (Array.isArray(history) && history.length > 0) {
+      for (const h of history.slice(-6)) {
+        if (h && h.content) {
+          contents.push({
+            role: h.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: h.content }]
+          });
+        }
+      }
+    }
+    contents.push({
+      role: 'user',
+      parts: [{ text: prompt }]
+    });
+
     for (const modelCandidate of candidateModels) {
       try {
         const payload = {
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: prompt }]
-            }
-          ],
+          contents: contents,
           generationConfig: {
             temperature: 0.3,
             maxOutputTokens: 2048
@@ -1097,10 +1138,17 @@ ${memorySnippet}`;
     throw lastError || new Error('All Gemini candidate models failed to respond.');
   }
 
-  async callOpenAiApi(prompt, apiKey, systemPrompt = null) {
+  async callOpenAiApi(prompt, apiKey, systemPrompt = null, history = []) {
     const cleanKey = this.cleanKey(apiKey);
     const messages = [];
     if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+    if (Array.isArray(history) && history.length > 0) {
+      for (const h of history.slice(-6)) {
+        if (h && h.content && (h.role === 'user' || h.role === 'assistant')) {
+          messages.push({ role: h.role, content: h.content });
+        }
+      }
+    }
     messages.push({ role: 'user', content: prompt });
 
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -1127,10 +1175,17 @@ ${memorySnippet}`;
     throw new Error(errData.error?.message || `OpenAI API HTTP ${res.status}`);
   }
 
-  async callNvidiaNim(prompt, apiKey, systemPrompt = null) {
+  async callNvidiaNim(prompt, apiKey, systemPrompt = null, history = []) {
     const cleanKey = this.cleanKey(apiKey);
     const messages = [];
     if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+    if (Array.isArray(history) && history.length > 0) {
+      for (const h of history.slice(-6)) {
+        if (h && h.content && (h.role === 'user' || h.role === 'assistant')) {
+          messages.push({ role: h.role, content: h.content });
+        }
+      }
+    }
     messages.push({ role: 'user', content: prompt });
 
     const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
@@ -1157,8 +1212,39 @@ ${memorySnippet}`;
     throw new Error(errData.error?.message || `NVIDIA NIM HTTP ${res.status}`);
   }
 
-  async callOllamaApi(prompt, ollamaUrl, model, systemPrompt = null) {
+  async callOllamaApi(prompt, ollamaUrl, model, systemPrompt = null, history = []) {
     const baseUrl = ollamaUrl.replace(/\/+$/, '');
+    const messages = [];
+    if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+    if (Array.isArray(history) && history.length > 0) {
+      for (const h of history.slice(-6)) {
+        if (h && h.content && (h.role === 'user' || h.role === 'assistant')) {
+          messages.push({ role: h.role, content: h.content });
+        }
+      }
+    }
+    messages.push({ role: 'user', content: prompt });
+
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: model || 'llama3.2',
+          messages: messages,
+          stream: false
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          reply: data.message?.content || '',
+          logs: [`Model: Local Ollama (${model || 'llama3.2'})`, 'Inference: 100% On-Device GPU/CPU'],
+          requiresClarification: false
+        };
+      }
+    } catch {}
+
     const res = await fetch(`${baseUrl}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1228,7 +1314,7 @@ ${memorySnippet}`;
           const data = await res.json().catch(() => ({}));
           const models = (data.data || []).map(m => m.id);
           this.cachedGroqModels = models;
-          const topModel = models.find(m => m.includes('120b') || m.includes('20b') || m.includes('qwen') || m.includes('llama')) || models[0] || 'GPT-OSS 120B';
+          const topModel = models.find(m => m.includes('llama-3.3-70b') || m.includes('llama-3.1-8b') || m.includes('llama')) || models[0] || 'Llama 3.3 70B Versatile';
           this.saveSettings({ groqApiKey: cleanKey, activeModel: 'groq-llama3' });
           return { success: true, message: `Groq API Key Verified! Model ${topModel} Active.`, provider: 'groq', models };
         }
