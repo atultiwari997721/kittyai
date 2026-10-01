@@ -51,8 +51,8 @@ const Navbar = () => {
         <div className="flex items-center gap-2">
           {/* Direct Safe Windows Download CTA */}
           <a
-            href="/downloads/KritiAI-Windows-Portable.zip"
-            download="KritiAI-Windows-Portable.zip"
+            href="/api/download?file=KritiAI-Setup.exe"
+            download="KritiAI-Setup.exe"
             className="px-4 py-2 rounded-full bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-fuchsia-500/25 transition-all flex items-center gap-1.5 hover:scale-105"
           >
             <Download size={14} />

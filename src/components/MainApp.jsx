@@ -31,18 +31,24 @@ import { DownloadView } from './DownloadView';
 import { TerminalWorkspace } from './TerminalWorkspace';
 import { PairingModal } from './PairingModal';
 import { AuthModal } from './AuthModal';
+import { LocalCapabilitiesModal } from './LocalCapabilitiesModal';
+import { FirstStartModal } from './FirstStartModal';
 import { useAuth } from '../context/AuthContext';
 import { kritiService } from '../services/kritiService';
+import { toolService } from '../services/toolService';
 
 export const MainApp = () => {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'terminal' | 'tasks' | 'controls' | 'plugins' | 'memory' | 'settings' | 'downloads'
   const [sidecarOnline, setSidecarOnline] = useState(false);
+  const [localRuntimeReady, setLocalRuntimeReady] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [currentModel, setCurrentModel] = useState(kritiService.resolveActiveModel());
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [showPairModal, setShowPairModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showCapabilitiesModal, setShowCapabilitiesModal] = useState(false);
+  const [showFirstStartModal, setShowFirstStartModal] = useState(false);
   const [pairingState, setPairingState] = useState(kritiService.getPairingState());
 
   useEffect(() => {
@@ -56,9 +62,17 @@ export const MainApp = () => {
       }
     });
 
+    // Check first start sequence
+    const firstStartDone = localStorage.getItem('kritiai_first_start_completed');
+    if (!firstStartDone) {
+      setShowFirstStartModal(true);
+    }
+
     const check = async () => {
       const online = await kritiService.checkSidecarHealth();
       setSidecarOnline(online);
+      const isDesktop = await toolService.isDesktopOnline();
+      setLocalRuntimeReady(isDesktop);
       const tasks = kritiService.getTasks();
       const waiting = tasks.filter(t => t.status === 'WAITING_APPROVAL').length;
       setPendingApprovalsCount(waiting);
@@ -83,7 +97,7 @@ export const MainApp = () => {
     { id: 'plugins', label: 'Plugins & Mail', icon: Layers, badge: 'Tools' },
     { id: 'memory', label: 'Memory Vault', icon: BrainCircuit, badge: 'Auto-Learn' },
     { id: 'settings', label: 'Settings & APIs', icon: Settings, badge: 'Keys' },
-    { id: 'downloads', label: 'Download Windows', icon: Download, badge: '.zip/.bat' },
+    { id: 'downloads', label: 'Download Windows', icon: Download, badge: '1-Click EXE' },
   ];
 
   return (
@@ -226,6 +240,27 @@ export const MainApp = () => {
 
             </div>
 
+            {/* KritiAI ● Online | Local Runtime ● Ready Status Indicator */}
+            <button
+              onClick={() => setShowCapabilitiesModal(true)}
+              title="View Local Execution Plane Capabilities"
+              className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition ${
+                localRuntimeReady
+                  ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/50'
+                  : 'bg-black/40 border-white/10 text-slate-300 hover:border-white/20'
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${localRuntimeReady ? 'bg-emerald-400 animate-pulse' : 'bg-cyan-400'}`} />
+                <span className="font-bold text-white">KritiAI</span>
+              </span>
+              <span className="text-slate-600">|</span>
+              <span className="flex items-center gap-1.5 font-mono text-[11px]">
+                <span className={`w-1.5 h-1.5 rounded-full ${localRuntimeReady ? 'bg-emerald-400' : 'bg-cyan-400'}`} />
+                <span>{localRuntimeReady ? 'Local Runtime Ready' : 'Control Plane'}</span>
+              </span>
+            </button>
+
             {/* 6-Digit Alphanumeric Bilateral Pairing Button */}
             <button
               onClick={() => setShowPairModal(true)}
@@ -348,6 +383,23 @@ export const MainApp = () => {
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
+      />
+
+      {/* Local Capabilities Inspection Modal */}
+      <LocalCapabilitiesModal
+        isOpen={showCapabilitiesModal}
+        onClose={() => setShowCapabilitiesModal(false)}
+        onOpenTerminal={() => setActiveTab('terminal')}
+        onOpenPairing={() => setShowPairModal(true)}
+      />
+
+      {/* First Start Setup & Capability Probe Modal */}
+      <FirstStartModal
+        isOpen={showFirstStartModal}
+        onClose={() => setShowFirstStartModal(false)}
+        onFinish={() => {
+          toolService.isDesktopOnline().then(setLocalRuntimeReady);
+        }}
       />
     </div>
   );

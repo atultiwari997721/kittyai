@@ -442,6 +442,34 @@ def core_probe_ollama() -> Dict[str, Any]:
     except Exception:
         return {"online": False, "models": [], "count": 0}
 
+def core_probe_vscode() -> Dict[str, Any]:
+    try:
+        res = core_run_terminal("where code")
+        installed = res.get("returncode") == 0 and bool(res.get("stdout", "").strip())
+        path = res.get("stdout", "").strip().split("\n")[0] if installed else None
+        return {"installed": installed, "path": path}
+    except Exception:
+        return {"installed": False, "path": None}
+
+def core_get_capabilities() -> Dict[str, Any]:
+    vscode = core_probe_vscode()
+    ollama = core_probe_ollama()
+    return {
+        "status": "online",
+        "desktop": True,
+        "terminal": True,
+        "filesystem": True,
+        "vscode": vscode.get("installed", False),
+        "vscodePath": vscode.get("path"),
+        "ollama": ollama.get("online", False),
+        "ollamaModels": ollama.get("models", []),
+        "browser": True,
+        "localRag": True,
+        "workspaceDir": str(config.get("workspaceDir", DEFAULT_WORKSPACE)),
+        "platform": "win32",
+        "version": "2.5.0"
+    }
+
 def core_execute_tool(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
     tool = (tool_name or "").lower().replace(".", "_").replace("-", "_").strip()
     logger.info(f"Executing tool: {tool} with args: {args}")
@@ -569,6 +597,10 @@ try:
     @app.get("/api/health")
     async def api_health():
         return core_health_check()
+
+    @app.get("/api/capabilities")
+    async def api_capabilities():
+        return core_get_capabilities()
 
     @app.get("/api/workspace")
     async def api_get_workspace():
@@ -749,6 +781,8 @@ class BuiltinDesktopHandler(BaseHTTPRequestHandler):
             self.send_json(core_get_pair_state())
         elif path == "/api/ollama/tags":
             self.send_json(core_probe_ollama())
+        elif path == "/api/capabilities":
+            self.send_json(core_get_capabilities())
         else:
             # Serve static files from dist/
             rel = path.lstrip("/")

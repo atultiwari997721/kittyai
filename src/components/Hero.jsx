@@ -338,49 +338,49 @@ const Hero = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
-            {/* Native Portable ZIP Package */}
+            {/* 1-Click Windows Setup (.exe) */}
             <div className="p-6 rounded-2xl bg-[#0e1322] border border-fuchsia-500/40 space-y-4 flex flex-col justify-between shadow-xl">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold font-mono text-fuchsia-400">RECOMMENDED</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-slate-300">Clean Package (.zip)</span>
+                  <span className="text-xs font-bold font-mono text-fuchsia-400">RECOMMENDED • 1-CLICK</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-emerald-300 font-mono">0 Threats Verified</span>
                 </div>
-                <h3 className="text-lg font-bold text-white">KritiAI Portable Windows Package</h3>
+                <h3 className="text-lg font-bold text-white">KritiAI Windows Setup (.exe)</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Clean portable archive. Contains launcher script, setup instructions, and zero false-positive anti-virus alerts.
+                  Single-click installer. Automatically installs to your machine, creates Desktop & Start Menu shortcuts, and launches local runtime. Zero Python setup.
                 </p>
               </div>
 
               <a
-                href="/downloads/KritiAI-Windows-Portable.zip"
-                download="KritiAI-Windows-Portable.zip"
+                href="/api/download?file=KritiAI-Setup.exe"
+                download="KritiAI-Setup.exe"
                 className="w-full py-3 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-all"
               >
                 <Download className="w-4 h-4" />
-                <span>Download KritiAI-Windows-Portable.zip</span>
+                <span>Download KritiAI-Setup.exe</span>
               </a>
             </div>
 
-            {/* Portable Batch Script Launcher */}
+            {/* Standalone Portable Package (.zip) */}
             <div className="p-6 rounded-2xl bg-[#0e1322] border border-white/10 space-y-4 flex flex-col justify-between shadow-xl">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold font-mono text-emerald-400">ONE-CLICK LAUNCHER</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-slate-300">Script (.bat)</span>
+                  <span className="text-xs font-bold font-mono text-cyan-400">PORTABLE ARCHIVE</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-slate-300">Package (.zip)</span>
                 </div>
-                <h3 className="text-lg font-bold text-white">KritiAI Windows Setup (.bat)</h3>
+                <h3 className="text-lg font-bold text-white">KritiAI Portable ZIP Package</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  No installation required. Launches the Python sidecar and opens the assistant defaultly on port 9972.
+                  Clean portable package. Contains standalone KritiAI.exe, VBS silent launcher, setup scripts, and offline frontend bundle.
                 </p>
               </div>
 
               <a
-                href="/downloads/KritiAI-Setup.bat"
-                download="KritiAI-Setup.bat"
+                href="/api/download?file=KritiAI-Windows-Portable.zip"
+                download="KritiAI-Windows-Portable.zip"
                 className="w-full py-3 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 font-bold text-xs flex items-center justify-center gap-2 transition-all border border-white/10"
               >
                 <Download className="w-4 h-4" />
-                <span>Download KritiAI-Setup.bat</span>
+                <span>Download KritiAI-Windows-Portable.zip</span>
               </a>
             </div>
           </div>

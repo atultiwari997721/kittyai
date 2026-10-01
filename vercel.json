@@ -1,6 +1,19 @@
 {
+  "headers": [
+    {
+      "source": "/downloads/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=3600" },
+        { "key": "Content-Disposition", "value": "attachment" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/downloads/(.*)", "destination": "/downloads/$1" },
+    { "source": "/install.ps1", "destination": "/downloads/Install-KritiAI.ps1" },
+    { "source": "/Install-KritiAI.ps1", "destination": "/downloads/Install-KritiAI.ps1" },
+    { "source": "/((?!api/|downloads/|assets/|.*\\..*).*)", "destination": "/index.html" }
   ]
 }

@@ -15,7 +15,8 @@ from app import (
     core_set_theme,
     core_set_volume,
     core_execute_tool,
-    core_probe_ollama
+    core_probe_ollama,
+    core_get_capabilities
 )
 
 def run_tests():
@@ -51,6 +52,12 @@ def run_tests():
 
     vol_res = core_execute_tool("windows_set_volume", {"level": 70})
     print(f"7. Tool Dispatch (windows_set_volume): {vol_res.get('message')}")
+
+    # 8. Capabilities check
+    caps = core_get_capabilities()
+    print(f"8. Capabilities Check: VSCode={caps.get('vscode')}, Ollama={caps.get('ollama')}, Terminal={caps.get('terminal')}")
+    assert caps.get("terminal") is True
+    assert caps.get("filesystem") is True
 
     # Clean up test file
     try:

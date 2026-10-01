@@ -288,6 +288,27 @@ export class ToolService {
     }
   }
 
+  async getCapabilities() {
+    try {
+      const res = await fetch(`${this.desktopUrl}/api/capabilities`, { method: 'GET', signal: AbortSignal.timeout(2000) });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {}
+    return {
+      status: 'offline',
+      desktop: false,
+      kernel: 'Cloud Web Plane',
+      port: null,
+      workspace: null,
+      powershell: false,
+      filesystem: false,
+      vscode: false,
+      ollama: false,
+      os_controls: false
+    };
+  }
+
   async executeTool(toolName, args = {}) {
     const name = (toolName || '').toLowerCase().replace(/-/g, '_').trim();
     console.log(`[ToolService] Executing tool '${name}' with arguments:`, args);
